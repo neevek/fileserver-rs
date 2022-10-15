@@ -1,2 +1,7 @@
 /target
-/dist
+/backend/target
+/frontend/target
+/common/target
+/target-trunk
+/frontend/dist
+.DS_Store

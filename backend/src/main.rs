@@ -6,7 +6,7 @@ use axum::{response::IntoResponse, routing::get, Router};
 use axum_extra::routing::SpaRouter;
 use chrono::{DateTime, Local};
 use clap::Parser;
-use common::{DirDesc, DirEntry, FileType};
+use common::{DirDesc, DirEntry, FileType, JsonRequest, JsonResponse};
 use path_dedot::*;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::path::PathBuf;
@@ -69,7 +69,7 @@ async fn main() {
         .merge(SpaRouter::new("/static", unsafe {
             ROOT_DIR.as_ref().unwrap().to_string_lossy().to_string()
         }))
-        .route("/api/*path", get(list_files))
+        .route("/api/listing/*path", get(list_files).post(create_dir))
         // .merge(SpaRouter::new("/assets", opt.static_dir))
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 
@@ -84,6 +84,30 @@ async fn main() {
         .serve(app.into_make_service())
         .await
         .expect("Unable to start server");
+}
+
+async fn create_dir(Path(path): Path<String>, Json(req): Json<JsonRequest>) -> impl IntoResponse {
+    let resp = match req {
+        JsonRequest::CreateDirectory { dir_name } => {
+            let full_path = format!(
+                "{}/{}/{}",
+                unsafe { ROOT_DIR.as_ref().unwrap().to_string_lossy().to_string() },
+                path.to_string(),
+                dir_name
+            );
+
+            match std::fs::create_dir(&full_path) {
+                Err(err) => JsonResponse::Failed {
+                    msg: Some(err.to_string()),
+                },
+                _ => JsonResponse::Succeeded {
+                    msg: Some(format!("create dir: {}", full_path)),
+                },
+            }
+        }
+    };
+
+    (StatusCode::OK, Json(resp).into_response())
 }
 
 async fn list_files(Path(path): Path<String>) -> impl IntoResponse {
@@ -111,7 +135,7 @@ async fn list_files(Path(path): Path<String>) -> impl IntoResponse {
         }
 
         let dir_desc = DirDesc {
-            dir_name: abs_path.to_str().unwrap().to_string(),
+            dir_name: format!("/{}", path),
             descendants,
         };
 

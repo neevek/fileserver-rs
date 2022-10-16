@@ -20,3 +20,14 @@ pub struct DirDesc {
     pub dir_name: String,
     pub descendants: Vec<DirEntry>,
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum JsonRequest {
+    CreateDirectory { dir_name: String },
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum JsonResponse {
+    Succeeded { msg: Option<String> },
+    Failed { msg: Option<String> },
+}

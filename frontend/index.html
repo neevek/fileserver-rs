@@ -4,15 +4,15 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-      h2 {
-        text-align: center;
-        padding: 20px 0;
+      body {
+        width: 1280px;
+        margin: auto;
       }
 
       .title {
         font-style: bold;
         font-size: 24px;
-        margin: 10px 0px 10px 0px;
+        margin: 20px 0px 20px 0px;
         display: block;
       }
 
@@ -49,6 +49,33 @@
       table tr td {
         padding: 8px 8px;
         margin: 0;
+      }
+
+      tr:hover {
+        background-color: #ccc !important;
+      }
+
+      .card {
+        width: 400px;
+        display: inline-block;
+        padding: 10px;
+        margin-bottom: 20px;
+        /* Add shadows to create the "card" effect */
+        box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
+        transition: 0.3s;
+      }
+
+      /* On mouse-over, add a deeper shadow */
+      .card:hover {
+        box-shadow: 0 8px 16px 0 rgba(0,0,0,0.2);
+      }
+
+      .card input {
+        margin-top: 10px;
+      }
+
+      .card button {
+        margin-left: 10px;
       }
 
     </style>

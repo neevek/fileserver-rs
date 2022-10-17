@@ -2,7 +2,7 @@
 
 use common::{DirDesc, JsonRequest};
 use dioxus::{events::FormEvent, prelude::*};
-use dioxus_router::{Route, Router};
+use dioxus_router::{use_router, Route, Router};
 use gloo_net::http::Request;
 use log::info;
 use reqwest::Url;
@@ -25,11 +25,15 @@ fn Listing(cx: Scope) -> Element {
     let route = dioxus_router::use_route(&cx);
     let url = route.url();
     let host_str = url.host_str().unwrap_or("");
-    let path = url.path().to_string();
     let scheme = url.scheme();
     let port = url
         .port()
         .unwrap_or_else(|| if scheme == "http" { 80 } else { 443 });
+
+    let mut path = url.path().to_string();
+    if path.ends_with('/') {
+        path = path.trim_end_matches('/').to_string();
+    }
 
     let fut = use_future(&cx, (), |_| async move {
         Request::get(format!("/api/listing{}", path).as_str())
@@ -39,6 +43,19 @@ fn Listing(cx: Scope) -> Element {
             .json::<DirDesc>()
             .await
     });
+
+    let create_dir_state: &UseState<Option<String>> = use_state(&cx, || None);
+    if let Some(dir_path) = create_dir_state.get() {
+        create_dir_state.set(None);
+        fut.restart();
+        use_router(&cx).replace_route(dir_path.as_str(), None, None);
+
+        return cx.render(rsx! {
+            Router {
+                Route { to: "", Listing {} }
+            }
+        });
+    }
 
     cx.render(match fut.value() {
         Some(Ok(dir_desc)) => rsx!(
@@ -50,6 +67,7 @@ fn Listing(cx: Scope) -> Element {
 
             CreateDirectory {
                 parent_dir: dir_desc.dir_name.clone(),
+                create_dir_state: create_dir_state.clone(),
             }
 
             div {
@@ -68,11 +86,20 @@ pub struct DirDescProps<'a> {
 }
 
 #[inline_props]
-fn CreateDirectory(cx: Scope, parent_dir: String) -> Element {
+fn CreateDirectory(
+    cx: Scope,
+    parent_dir: String,
+    create_dir_state: UseState<Option<String>>,
+) -> Element {
     let handle_submit = move |ev: FormEvent| {
         if let Some(dir_name) = ev.values.get("dir_name") {
-            let dir_name = dir_name.clone();
+            let dir_name = dir_name.trim().to_string();
+            if dir_name.is_empty() {
+                return;
+            }
+
             let parent_dir = parent_dir.clone();
+            let create_dir_state = create_dir_state.clone();
             cx.spawn(async move {
                 let json_req = JsonRequest::CreateDirectory {
                     dir_name: dir_name.clone(),
@@ -87,6 +114,7 @@ fn CreateDirectory(cx: Scope, parent_dir: String) -> Element {
                 match resp {
                     Ok(resp) => {
                         info!("created directory: {:?}", resp);
+                        create_dir_state.set(Some(format!("{}/{}", parent_dir, dir_name)));
                     }
                     Err(err) => {
                         info!("failed to create directory: {}", err);
@@ -119,10 +147,12 @@ fn CreateDirectory(cx: Scope, parent_dir: String) -> Element {
 #[inline_props]
 fn ListingTable<'a>(cx: Scope, props: DirDescProps<'a>) -> Element {
     let mut cur_path = props.cur_url.path();
-    let mut parent = "";
     cur_path = cur_path.trim_end_matches(|c| c == '/');
-    if !cur_path.is_empty() {
-        parent = &cur_path[..(cur_path.rfind('/').unwrap_or(0) + 1)];
+    let mut parent = "/";
+    if let Some(idx) = cur_path.rfind('/') {
+        if idx > 0 {
+            parent = &cur_path[..idx];
+        }
     }
 
     cx.render(rsx! {

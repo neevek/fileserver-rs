@@ -91,7 +91,7 @@ fn CreateDirectory(
     parent_dir: String,
     create_dir_state: UseState<Option<String>>,
 ) -> Element {
-    let handle_submit = move |ev: FormEvent| {
+    let handle_create_dir = move |ev: FormEvent| {
         if let Some(dir_name) = ev.values.get("dir_name") {
             let dir_name = dir_name.trim().to_string();
             if dir_name.is_empty() {
@@ -124,20 +124,47 @@ fn CreateDirectory(
         }
     };
 
+    let handle_upload_files = move |ev: FormEvent| {
+        info!(">>>>>> file:{:?}", ev.values);
+    };
+
     cx.render(rsx! {
         div {
-            class: "card",
-            div { "Create a new sub-directory under current directory" }
-            form {
-                prevent_default: "onsubmit",
-                onsubmit: handle_submit,
-                method: "post",
-                input {
-                    r#type: "text",
-                    name: "dir_name"
+            class: "header_card_container",
+            div {
+                class: "card",
+                div { "Create a new sub-directory under current directory" }
+                form {
+                    prevent_default: "onsubmit",
+                    onsubmit: handle_create_dir,
+                    method: "post",
+                    input {
+                        r#type: "text",
+                        name: "dir_name"
+                    }
+                    button {
+                        "Create Directory"
+                    }
                 }
-                button {
-                    "Create Directory"
+            }
+
+            div {
+                class: "card",
+                div { "Select files to upload to current directory" }
+                form {
+                    prevent_default: "onsubmit",
+                    onsubmit: handle_upload_files,
+                    method: "post",
+                    enctype: "multipart/form-data",
+                    input {
+                        r#type: "file",
+                        name: "file",
+                        multiple: "true",
+                    }
+                    input {
+                        r#type: "submit",
+                        value: "Upload"
+                    }
                 }
             }
         }

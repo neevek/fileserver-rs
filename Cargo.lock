@@ -544,6 +544,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fast_qr"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6ca492f7dae5b7705f8997b042fcf7a665addb13181908d1fa7cb6d9bc1c0e6"
+dependencies = [
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "fastrand"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -600,6 +609,7 @@ dependencies = [
  "console_error_panic_hook",
  "dioxus",
  "dioxus-router",
+ "fast_qr",
  "gloo-net",
  "log",
  "reqwest",

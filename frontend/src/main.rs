@@ -3,6 +3,10 @@
 use common::{DirDesc, JsonRequest};
 use dioxus::{events::FormEvent, prelude::*};
 use dioxus_router::{use_router, Route, Router};
+use fast_qr::{
+    convert::svg::{Shape, SvgBuilder},
+    QRBuilder, Version, ECL,
+};
 use gloo_net::http::Request;
 use log::info;
 use reqwest::Url;
@@ -59,6 +63,8 @@ fn Listing(cx: Scope) -> Element {
 
     cx.render(match fut.value() {
         Some(Ok(dir_desc)) => rsx!(
+            QRCode { data: "http://baidu.com/?asdfafasdfasdfkaljglaasdfafasdfasdfkaljglaasdfafasdfasdfkaljglaasdfafasdfasdfkaljglaasdfafasdfasdfkaljglaasdfafasdfasdfkaljglaasdfafasdfasdfkaljglaasdfafasdfasdfkaljglaasdfafasdfasdfkaljgla" }
+
             div {
                 class: "title",
                 a { href: "{scheme}://{host_str}:{port}", "{scheme}://{host_str}:{port}" }
@@ -71,7 +77,7 @@ fn Listing(cx: Scope) -> Element {
             }
 
             div {
-                ListingTable{ props: DirDescProps { dir_desc, cur_url: &url }  },
+                ListingTable{ dir_desc: dir_desc, cur_url: &url },
             }
         ),
         Some(Err(err)) => rsx!("Error: {err}"),
@@ -79,10 +85,39 @@ fn Listing(cx: Scope) -> Element {
     })
 }
 
+#[inline_props]
+fn QRCode<'a>(cx: Scope, data: &'a str) -> Element {
+    let qrcode = QRBuilder::new(data.to_string())
+        .ecl(ECL::L)
+        .version(Version::V09)
+        .build();
+
+    let svg = SvgBuilder::default()
+        .shape(Shape::RoundedSquare)
+        .to_str(&qrcode.unwrap());
+
+    cx.render(rsx!(div {
+        class: "qrcode",
+        dangerous_inner_html: "{svg}",
+    }))
+}
+
 #[derive(Props)]
-pub struct DirDescProps<'a> {
-    cur_url: &'a Url,
-    dir_desc: &'a DirDesc,
+struct TooltipProps<'a> {
+    w: i32,
+    h: i32,
+    x: i32,
+    y: i32,
+    children: Element<'a>,
+}
+
+fn Tooltip<'a>(cx: Scope<'a, TooltipProps<'a>>) -> Element {
+    let props = cx.props;
+    cx.render(rsx!(div {
+        class: "tooltip",
+        style: "width:{props.w}px; height:{props.h}px; left:{props.x}px; top:{props.y}px;",
+        &props.children
+    }))
 }
 
 #[inline_props]
@@ -171,9 +206,14 @@ fn CreateDirectory(
     })
 }
 
-#[inline_props]
-fn ListingTable<'a>(cx: Scope, props: DirDescProps<'a>) -> Element {
-    let mut cur_path = props.cur_url.path();
+#[derive(Props)]
+pub struct DirDescProps<'a> {
+    cur_url: &'a Url,
+    dir_desc: &'a DirDesc,
+}
+
+fn ListingTable<'a>(cx: Scope<'a, DirDescProps<'a>>) -> Element {
+    let mut cur_path = cx.props.cur_url.path();
     cur_path = cur_path.trim_end_matches(|c| c == '/');
     let mut parent = "/";
     if let Some(idx) = cur_path.rfind('/') {
@@ -181,6 +221,20 @@ fn ListingTable<'a>(cx: Scope, props: DirDescProps<'a>) -> Element {
             parent = &cur_path[..idx];
         }
     }
+
+    let qrcode_state: &UseState<Option<QRCodeParams>> = use_state(&cx, || None);
+    let qrcode = match qrcode_state.get() {
+        Some(qrcode_params) => Some(rsx!(Tooltip {
+            w: qrcode_params.w,
+            h: qrcode_params.h,
+            x: qrcode_params.x,
+            y: qrcode_params.y,
+            QRCode {
+                data: qrcode_params.url.as_str()
+            }
+        })),
+        _ => None,
+    };
 
     cx.render(rsx! {
         table {
@@ -205,7 +259,7 @@ fn ListingTable<'a>(cx: Scope, props: DirDescProps<'a>) -> Element {
                 }
             ))
 
-            props
+            cx.props
             .dir_desc
             .descendants
             .iter()
@@ -213,6 +267,16 @@ fn ListingTable<'a>(cx: Scope, props: DirDescProps<'a>) -> Element {
                 rsx!(
                     tr {
                         key: "{cur_path}/{f.file_name}",
+
+                        onmouseover: |e| {
+                            qrcode_state.set(Some(QRCodeParams {
+                                x: e.data.client_x,
+                                y: e.data.client_y,
+                                w: 180,
+                                h: 180,
+                                url: f.file_name.clone(),
+                            }));
+                        },
 
                         if f.file_type == common::FileType::Directory {
                             rsx!(th {
@@ -233,5 +297,15 @@ fn ListingTable<'a>(cx: Scope, props: DirDescProps<'a>) -> Element {
             )
 
         }
+
+        qrcode,
     })
+}
+
+struct QRCodeParams {
+    w: i32,
+    h: i32,
+    x: i32,
+    y: i32,
+    url: String,
 }

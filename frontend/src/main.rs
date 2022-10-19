@@ -1,7 +1,10 @@
 #![allow(non_snake_case)]
 
-use common::{DirDesc, JsonRequest};
-use dioxus::{events::FormEvent, prelude::*};
+use common::{DirDesc, DirEntry, JsonRequest};
+use dioxus::{
+    events::{ondragenter, FormData, FormEvent},
+    prelude::*,
+};
 use dioxus_router::{use_router, Route, Router};
 use fast_qr::{
     convert::svg::{Shape, SvgBuilder},
@@ -28,11 +31,7 @@ fn app(cx: Scope) -> Element {
 fn Listing(cx: Scope) -> Element {
     let route = dioxus_router::use_route(&cx);
     let url = route.url();
-    let host_str = url.host_str().unwrap_or("");
-    let scheme = url.scheme();
-    let port = url
-        .port()
-        .unwrap_or_else(|| if scheme == "http" { 80 } else { 443 });
+    let url_base = get_url_base(url);
 
     let mut path = url.path().to_string();
     if path.ends_with('/') {
@@ -63,11 +62,9 @@ fn Listing(cx: Scope) -> Element {
 
     cx.render(match fut.value() {
         Some(Ok(dir_desc)) => rsx!(
-            QRCode { data: "http://baidu.com/?asdfafasdfasdfkaljglaasdfafasdfasdfkaljglaasdfafasdfasdfkaljglaasdfafasdfasdfkaljglaasdfafasdfasdfkaljglaasdfafasdfasdfkaljglaasdfafasdfasdfkaljglaasdfafasdfasdfkaljglaasdfafasdfasdfkaljgla" }
-
             div {
                 class: "title",
-                a { href: "{scheme}://{host_str}:{port}", "{scheme}://{host_str}:{port}" }
+                a { href: "{url_base}", "{url_base}" }
                 "{dir_desc.dir_name}"
             }
 
@@ -83,6 +80,21 @@ fn Listing(cx: Scope) -> Element {
         Some(Err(err)) => rsx!("Error: {err}"),
         _ => rsx!("Loading..."),
     })
+}
+
+fn get_url_base(url: &Url) -> String {
+    match url.host_str() {
+        Some(host_str) => {
+            let scheme = url.scheme();
+            let port = url.port().unwrap_or_default();
+            if port > 0 {
+                format!("{}://{}:{}", scheme, host_str, port)
+            } else {
+                format!("{}://{}", scheme, host_str)
+            }
+        }
+        None => "".to_string(),
+    }
 }
 
 #[inline_props]
@@ -236,6 +248,8 @@ fn ListingTable<'a>(cx: Scope<'a, DirDescProps<'a>>) -> Element {
         _ => None,
     };
 
+    let url_base = use_state(&cx, || get_url_base(cx.props.cur_url));
+
     cx.render(rsx! {
         table {
             thead {
@@ -263,42 +277,68 @@ fn ListingTable<'a>(cx: Scope<'a, DirDescProps<'a>>) -> Element {
             .dir_desc
             .descendants
             .iter()
-            .map(|f|
-                rsx!(
-                    tr {
-                        key: "{cur_path}/{f.file_name}",
-
-                        onmouseover: |e| {
-                            qrcode_state.set(Some(QRCodeParams {
-                                x: e.data.client_x,
-                                y: e.data.client_y,
-                                w: 180,
-                                h: 180,
-                                url: f.file_name.clone(),
-                            }));
-                        },
-
-                        if f.file_type == common::FileType::Directory {
-                            rsx!(th {
-                                a {
-                                    href: "{cur_path}/{f.file_name}",
-                                    "{f.file_name}"
-                                }
-                            })
-                        } else {
-                            rsx!(th { "{f.file_name}" })
-                        }
-
-                        td { "{f.file_size}" }
-                        td { "{f.last_accessed}" }
-                        td { "Delete" }
-                    }
-                )
-            )
+            .map(|entry| rsx!(
+                TableRow {
+                    key: "{cur_path}/{entry.file_name}",
+                    url_base: url_base.as_str(),
+                    entry: entry,
+                    cur_path: cur_path,
+                    qrcode_state: qrcode_state
+                }))
 
         }
 
         qrcode,
+    })
+}
+
+#[derive(Props)]
+struct DirEntryProps<'a> {
+    url_base: &'a str,
+    entry: &'a DirEntry,
+    cur_path: &'a str,
+    qrcode_state: &'a UseState<Option<QRCodeParams>>,
+}
+
+fn TableRow<'a>(cx: Scope<'a, DirEntryProps<'a>>) -> Element {
+    let url_base = if cx.props.url_base.ends_with('/') {
+        cx.props.url_base.trim_end_matches('/')
+    } else {
+        cx.props.url_base
+    };
+
+    let entry = cx.props.entry;
+    cx.render(rsx! {
+        tr {
+            rsx!(th {
+                onmouseover: move |e| {
+                    cx.props.qrcode_state.set(Some(QRCodeParams {
+                        x: e.data.client_x + 10,
+                        y: e.data.client_y + 10,
+                        w: 180,
+                        h: 180,
+                        url: format!("{}{}/{}", url_base, cx.props.cur_path, entry.file_name),
+                    }));
+                },
+                onmouseout: move |_| {
+                    cx.props.qrcode_state.set(None)
+                },
+
+                a {
+                    href: "{cx.props.cur_path}/{entry.file_name}",
+                    if entry.file_type == common::FileType::Directory {
+                        rsx!("📁 ")
+                    } else {
+                        rsx!("📝 ")
+                    }
+                    "{entry.file_name}"
+                }
+            })
+
+            td { "{entry.file_size}" }
+            td { "{entry.last_accessed}" }
+            td { "Delete" }
+        }
     })
 }
 

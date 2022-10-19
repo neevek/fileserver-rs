@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
-  <head>
+
+<head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
@@ -9,104 +10,109 @@
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab&display=swap" rel="stylesheet">
 
     <style>
-      body {
-        width: 1280px;
-        margin: auto;
-        font-family: 'Roboto Slab', serif;
-      }
+        body {
+            width: 1280px;
+            margin: auto;
+            font-family: 'Roboto Slab', serif;
+        }
 
-      .title {
-        font-style: bold;
-        font-size: 24px;
-        margin: 20px 0px 20px 0px;
-        display: block;
-      }
+        a {
+            text-decoration: none;
+        }
 
-      table {
-        border: 1px solid #ddd !important;
-        margin: 0 0 40px 0;
-        width: 100%;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-        border-spacing: 0;
-      }
+        .title {
+            font-style: bold;
+            font-size: 24px;
+            margin: 20px 0px 20px 0px;
+            display: block;
+        }
 
-      table thead td {
-        font-size: 18px;
-        font-style: bold;
-        padding: 10px 10px;
-        color: white;
-        background: black;
-      }
+        table {
+            border: 1px solid #ddd !important;
+            margin: 0 0 40px 0;
+            width: 100%;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+            border-spacing: 0;
+        }
 
-      table th {
-        font-style: bold;
-        text-align: left;
-        padding: 8px 8px;
-      }
+        table thead td {
+            font-size: 18px;
+            font-style: bold;
+            padding: 10px 10px;
+            color: white;
+            background: black;
+        }
 
-      table tr {
-        background: #f6f6f6;
-      }
+        table th {
+            font-style: bold;
+            text-align: left;
+            padding: 8px 8px;
+        }
 
-      table tr:nth-of-type(odd) {
-        background: #e9e9e9;
-      }
+        table tr {
+            background: #f6f6f6;
+        }
 
-      table tr td {
-        padding: 8px 8px;
-        margin: 0;
-      }
+        table tr:nth-of-type(odd) {
+            background: #e9e9e9;
+        }
 
-      tr:hover {
-        background-color: #ccc !important;
-      }
+        table tr td {
+            padding: 8px 8px;
+            margin: 0;
+        }
 
-      .header_card_container>div {
-        width: 400px;
-        display: inline-block;
-        padding: 10px;
-        margin-bottom: 20px;
-        /* Add shadows to create the "card" effect */
-        box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
-        transition: 0.3s;
-        margin-left: 20px;
-      }
+        tr:hover {
+            background-color: #ccc !important;
+        }
 
-      .header_card_container>div:nth-child(2n+1) {
-        margin-left: 0;
-      }
+        .header_card_container>div {
+            width: 400px;
+            display: inline-block;
+            padding: 10px;
+            margin-bottom: 20px;
+            /* Add shadows to create the "card" effect */
+            box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2);
+            transition: 0.3s;
+            margin-left: 20px;
+        }
 
-      /* On mouse-over, add a deeper shadow */
-      .card:hover {
-        box-shadow: 0 8px 16px 0 rgba(0,0,0,0.2);
-      }
+        .header_card_container>div:nth-child(2n+1) {
+            margin-left: 0;
+        }
 
-      .card input {
-        margin-top: 10px;
-      }
+        /* On mouse-over, add a deeper shadow */
+        .card:hover {
+            box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.2);
+        }
 
-      .card button {
-        margin-left: 10px;
-      }
+        .card input {
+            margin-top: 10px;
+        }
 
-      .qrcode {
-        width: 180px;
-        height: 180px;
-      }
+        .card button {
+            margin-left: 10px;
+        }
 
-      .tooltip-on-hover:hover {
-        display: block;
-      }
+        .qrcode {
+            width: 180px;
+            height: 180px;
+        }
 
-      .tooltip {
-        display: block;
-        position: absolute;
-      }
+        .tooltip-on-hover:hover {
+            display: block;
+        }
 
+        .tooltip {
+            display: block;
+            position: absolute;
+        }
     </style>
 
-  </head>
-  <body>
+</head>
+
+<body>
     <div id="main"> </div>
-  </body>
+</body>
+
 </html>

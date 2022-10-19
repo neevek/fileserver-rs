@@ -2,7 +2,7 @@
 
 use common::{DirDesc, DirEntry, JsonRequest};
 use dioxus::{
-    events::{ondragenter, FormData, FormEvent},
+    events::{ondragenter, FormData, FormEvent, MouseData},
     prelude::*,
 };
 use dioxus_router::{use_router, Route, Router};
@@ -273,6 +273,16 @@ fn ListingTable<'a>(cx: Scope<'a, DirDescProps<'a>>) -> Element {
                 }
             ))
 
+            cx.props.dir_desc.descendants.is_empty().then(|| rsx!{
+                tr {
+                    th {
+                        class: "empty_directory",
+                        colspan: "4",
+                        "This directory is empty."
+                    }
+                }
+            })
+
             cx.props
             .dir_desc
             .descendants
@@ -311,18 +321,23 @@ fn TableRow<'a>(cx: Scope<'a, DirEntryProps<'a>>) -> Element {
     cx.render(rsx! {
         tr {
             rsx!(th {
-                onmouseover: move |e| {
-                    cx.props.qrcode_state.set(Some(QRCodeParams {
-                        x: e.data.client_x + 10,
-                        y: e.data.client_y + 10,
-                        w: 180,
-                        h: 180,
-                        url: format!("{}{}/{}", url_base, cx.props.cur_path, entry.file_name),
-                    }));
-                },
-                onmouseout: move |_| {
-                    cx.props.qrcode_state.set(None)
-                },
+                a {
+                    href: "#",
+                    style: "margin-right: 8px",
+                    onmouseover: move |e| {
+                        cx.props.qrcode_state.set(Some(QRCodeParams {
+                            x: e.data.client_x + 20,
+                            y: e.data.client_y + 20,
+                            w: 240,
+                            h: 240,
+                            url: format!("{}{}/{}", url_base, cx.props.cur_path, entry.file_name),
+                        }));
+                    },
+                    onmouseout: move |_| {
+                        cx.props.qrcode_state.set(None)
+                    },
+                    img { src:"data:image/x-icon;base64,AAABAAEAEBACAAAAAACwAAAAFgAAACgAAAAQAAAAIAAAAAEAAQAAAAAAQAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAA////AAKnAAB6MgAASlIAAEtCAAB7AAAAAnkAAP/YAACDBQAAUGMAAPy/AAACQAAAel4AAEpSAABK0gAAel4AAAJAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", alt:"QRCode" }
+                }
 
                 a {
                     href: "{cx.props.cur_path}/{entry.file_name}",

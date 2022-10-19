@@ -1,16 +1,22 @@
-use axum::extract::Path;
+use axum::body::Bytes;
+use axum::extract::{BodyStream, Path};
 use axum::http::StatusCode;
 use axum::response::Redirect;
-use axum::Json;
+use axum::routing::post;
 use axum::{response::IntoResponse, routing::get, Router};
+use axum::{BoxError, Json};
 use axum_extra::routing::SpaRouter;
 use chrono::{DateTime, Local};
 use clap::Parser;
 use common::{DirDesc, DirEntry, FileType, JsonRequest, JsonResponse};
+use futures::{Stream, TryStreamExt};
 use path_dedot::*;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::path::PathBuf;
 use std::str::FromStr;
+use tokio::fs::File;
+use tokio::io::{self, BufWriter};
+use tokio_util::io::StreamReader;
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use walkdir::WalkDir;
@@ -70,6 +76,7 @@ async fn main() {
             ROOT_DIR.as_ref().unwrap().to_string_lossy().to_string()
         }))
         .route("/api/listing/*path", get(list_files).post(create_dir))
+        .route("/api/upload/:path", post(save_request_body))
         // .merge(SpaRouter::new("/assets", opt.static_dir))
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 
@@ -108,6 +115,42 @@ async fn create_dir(Path(path): Path<String>, Json(req): Json<JsonRequest>) -> i
     };
 
     (StatusCode::OK, Json(resp).into_response())
+}
+
+async fn save_request_body(
+    Path(file_name): Path<String>,
+    body: BodyStream,
+) -> Result<(), (StatusCode, String)> {
+    log::info!(">>>>>>>>>>>>>> haha filename: {}", file_name);
+    receive_file_upload("test.txt", body).await
+}
+
+async fn receive_file_upload<S, E>(path: &str, stream: S) -> Result<(), (StatusCode, String)>
+where
+    S: Stream<Item = Result<Bytes, E>>,
+    E: Into<BoxError>,
+{
+    // if !path_is_valid(path) {
+    //     return Err((StatusCode::BAD_REQUEST, "Invalid path".to_owned()));
+    // }
+
+    async {
+        // Convert the stream into an `AsyncRead`.
+        let body_with_io_error = stream.map_err(|err| io::Error::new(io::ErrorKind::Other, err));
+        let body_reader = StreamReader::new(body_with_io_error);
+        futures::pin_mut!(body_reader);
+
+        // Create the file. `File` implements `AsyncWrite`.
+        let path = std::path::Path::new("/Users/neevek/Desktop/upload").join(path);
+        let mut file = BufWriter::new(File::create(path).await?);
+
+        // Copy the body into the file.
+        tokio::io::copy(&mut body_reader, &mut file).await?;
+
+        Ok::<_, io::Error>(())
+    }
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
 }
 
 async fn list_files(Path(path): Path<String>) -> impl IntoResponse {

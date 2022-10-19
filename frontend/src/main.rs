@@ -199,8 +199,9 @@ fn CreateDirectory(
                 class: "card",
                 div { "Select files to upload to current directory" }
                 form {
-                    prevent_default: "onsubmit",
-                    onsubmit: handle_upload_files,
+                    // prevent_default: "onsubmit",
+                    // onsubmit: handle_upload_files,
+                    action: "/api/upload/test",
                     method: "post",
                     enctype: "multipart/form-data",
                     input {

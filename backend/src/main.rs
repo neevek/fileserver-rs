@@ -1,16 +1,23 @@
-use axum::extract::Path;
+use axum::extract::{Multipart, Path};
 use axum::http::StatusCode;
 use axum::response::Redirect;
+use axum::routing::post;
 use axum::Json;
 use axum::{response::IntoResponse, routing::get, Router};
-use axum_extra::routing::SpaRouter;
 use chrono::{DateTime, Local};
 use clap::Parser;
 use common::{DirDesc, DirEntry, FileType, JsonRequest, JsonResponse};
+use futures::StreamExt;
+use futures::TryStreamExt;
+use log::info;
 use path_dedot::*;
+use serde::Deserialize;
+use std::io::Write;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::path::PathBuf;
 use std::str::FromStr;
+use tokio::io::AsyncWriteExt;
+
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use walkdir::WalkDir;
@@ -55,6 +62,7 @@ async fn main() {
 
     match PathBuf::from(&opt.root_dir).parse_dot() {
         Ok(root_dir) if root_dir.is_dir() => {
+            info!("root_dir: {:?}", root_dir);
             unsafe {
                 ROOT_DIR = Some(root_dir.to_path_buf());
             }
@@ -66,10 +74,12 @@ async fn main() {
     }
 
     let app = Router::new()
-        .merge(SpaRouter::new("/static", unsafe {
-            ROOT_DIR.as_ref().unwrap().to_string_lossy().to_string()
-        }))
+        // .merge(SpaRouter::new("/static", unsafe {
+        //     ROOT_DIR.as_ref().unwrap().to_string_lossy().to_string()
+        // }))
+        .route("/api/listing/", get(serve_root).post(serve_root))
         .route("/api/listing/*path", get(list_files).post(create_dir))
+        .route("/api/upload/*path", post(save_request_body))
         // .merge(SpaRouter::new("/assets", opt.static_dir))
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 
@@ -108,6 +118,64 @@ async fn create_dir(Path(path): Path<String>, Json(req): Json<JsonRequest>) -> i
     };
 
     (StatusCode::OK, Json(resp).into_response())
+}
+
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+struct UploadParams {
+    filename: String,
+}
+
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+struct UploadForm {
+    filename: String,
+}
+
+async fn save_request_body(
+    Path(path): Path<String>,
+    mut multipart: Multipart,
+) -> Result<Json<JsonResponse>, AppError> {
+    let parent_dir = unsafe {
+        ROOT_DIR
+            .as_ref()
+            .unwrap()
+            .join(path.trim_start_matches('/'))
+    };
+    while let Some(mut field) = multipart
+        .next_field()
+        .await
+        .map_err(|_| AppError("failed to iterate over uploaded files".to_string()))?
+    {
+        let name = field.file_name().unwrap().to_string();
+        let filename = parent_dir.join(name.as_str());
+        let mut file = tokio::fs::File::create(filename).await.map_err(|_| {
+            AppError(format!(
+                "failed to create file at: {}/{}",
+                parent_dir.to_str().unwrap(),
+                name
+            ))
+        })?;
+
+        // save_file(path.as_str(), form.filename.as_str(), field.into_stream()).await
+        while let Some(chunk) = field
+            .chunk()
+            .await
+            .map_err(|_| AppError(format!("failed to read from file: {}", name)))?
+        {
+            file.write(&chunk[..])
+                .await
+                .map_err(|_| AppError("failed to write file".to_string()))?;
+        }
+    }
+
+    Ok(Json(JsonResponse::Succeeded {
+        msg: Some(format!("file uploaded: {}", "file")),
+    }))
+}
+
+async fn serve_root() -> impl IntoResponse {
+    list_files(Path("/".to_string())).await
 }
 
 async fn list_files(Path(path): Path<String>) -> impl IntoResponse {
@@ -178,5 +246,14 @@ fn convert_dir_entry(entry: &walkdir::DirEntry) -> DirEntry {
         file_type,
         file_size,
         last_accessed,
+    }
+}
+
+struct AppError(String);
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> axum::response::Response {
+        let json_resp = Json(JsonResponse::Failed { msg: Some(self.0) });
+        (StatusCode::OK, json_resp).into_response()
     }
 }

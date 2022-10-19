@@ -96,7 +96,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c9e3356844c4d6a6d6467b8da2cffb4a2820be256f50a3a386c9d152bab31043"
 dependencies = [
  "async-trait",
- "axum-core",
+ "axum-core 0.2.8",
  "bitflags",
  "bytes",
  "futures-util",
@@ -104,9 +104,39 @@ dependencies = [
  "http-body",
  "hyper",
  "itoa",
- "matchit",
+ "matchit 0.5.0",
  "memchr",
  "mime",
+ "percent-encoding",
+ "pin-project-lite",
+ "serde",
+ "sync_wrapper",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tower-layer",
+ "tower-service",
+]
+
+[[package]]
+name = "axum"
+version = "0.6.0-rc.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2628a243073c55aef15a1c1fe45c87f21b84f9e89ca9e7b262a180d3d03543d"
+dependencies = [
+ "async-trait",
+ "axum-core 0.3.0-rc.2",
+ "bitflags",
+ "bytes",
+ "futures-util",
+ "http",
+ "http-body",
+ "hyper",
+ "itoa",
+ "matchit 0.6.0",
+ "memchr",
+ "mime",
+ "multer",
  "percent-encoding",
  "pin-project-lite",
  "serde",
@@ -137,12 +167,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "axum-core"
+version = "0.3.0-rc.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "473bd0762170028bb6b5068be9e97de2a9f0af3bf2084498d840498f47194d3d"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "futures-util",
+ "http",
+ "http-body",
+ "mime",
+ "tower-layer",
+ "tower-service",
+]
+
+[[package]]
 name = "axum-extra"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "69034b3b0fd97923eee2ce8a47540edb21e07f48f87f67d44bb4271cec622bdb"
 dependencies = [
- "axum",
+ "axum 0.5.16",
  "bytes",
  "futures-util",
  "http",
@@ -159,14 +205,17 @@ dependencies = [
 name = "backend"
 version = "0.1.0"
 dependencies = [
- "axum",
+ "axum 0.6.0-rc.2",
  "axum-extra",
  "chrono",
  "clap",
  "common",
+ "futures",
  "log",
  "mime_guess",
  "path-dedot",
+ "serde",
+ "serde_json",
  "tokio",
  "tokio-util",
  "tower",
@@ -619,8 +668,24 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-logger",
+ "web-sys",
  "yew",
  "yew-router",
+]
+
+[[package]]
+name = "futures"
+version = "0.3.24"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f21eda599937fba36daeb58a22e8f5cee2d14c4a17b5b7739c7c8e5e3b8230c"
+dependencies = [
+ "futures-channel",
+ "futures-core",
+ "futures-executor",
+ "futures-io",
+ "futures-sink",
+ "futures-task",
+ "futures-util",
 ]
 
 [[package]]
@@ -630,6 +695,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "30bdd20c28fadd505d0fd6712cdfcb0d4b5648baf45faef7f852afb2399bb050"
 dependencies = [
  "futures-core",
+ "futures-sink",
 ]
 
 [[package]]
@@ -637,6 +703,23 @@ name = "futures-core"
 version = "0.3.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e5aa3de05362c3fb88de6531e6296e85cde7739cccad4b9dfeeb7f6ebce56bf"
+
+[[package]]
+name = "futures-executor"
+version = "0.3.24"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ff63c23854bee61b6e9cd331d523909f238fc7636290b96826e9cfa5faa00ab"
+dependencies = [
+ "futures-core",
+ "futures-task",
+ "futures-util",
+]
+
+[[package]]
+name = "futures-io"
+version = "0.3.24"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbf4d2a7a308fd4578637c0b17c7e1c7ba127b8f6ba00b29f717e9655d85eb68"
 
 [[package]]
 name = "futures-macro"
@@ -667,9 +750,13 @@ version = "0.3.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44fb6cb1be61cc1d2e43b262516aafcf63b241cffdb1d3fa115f91d9c7b09c90"
 dependencies = [
+ "futures-channel",
  "futures-core",
+ "futures-io",
  "futures-macro",
+ "futures-sink",
  "futures-task",
+ "memchr",
  "pin-project-lite",
  "pin-utils",
  "slab",
@@ -1086,6 +1173,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73cbba799671b762df5a175adf59ce145165747bb891505c43d09aefbbf38beb"
 
 [[package]]
+name = "matchit"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3dfc802da7b1cf80aefffa0c7b2f77247c8b32206cc83c270b61264f5b360a80"
+
+[[package]]
 name = "memchr"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1132,6 +1225,24 @@ dependencies = [
  "log",
  "wasi 0.11.0+wasi-snapshot-preview1",
  "windows-sys",
+]
+
+[[package]]
+name = "multer"
+version = "2.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ed4198ce7a4cbd2a57af78d28c6fbb57d81ac5f1d6ad79ac6c5587419cbdf22"
+dependencies = [
+ "bytes",
+ "encoding_rs",
+ "futures-util",
+ "http",
+ "httparse",
+ "log",
+ "memchr",
+ "mime",
+ "spin",
+ "version_check",
 ]
 
 [[package]]
@@ -1641,6 +1752,12 @@ dependencies = [
  "libc",
  "winapi",
 ]
+
+[[package]]
+name = "spin"
+version = "0.9.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f6002a767bff9e83f8eeecf883ecb8011875a21ae8da43bffb817a57e78cc09"
 
 [[package]]
 name = "strsim"

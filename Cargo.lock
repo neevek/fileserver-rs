@@ -168,6 +168,8 @@ dependencies = [
  "log",
  "mime_guess",
  "path-dedot",
+ "serde",
+ "serde_json",
  "tokio",
  "tokio-util",
  "tower",
@@ -620,6 +622,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-logger",
+ "web-sys",
  "yew",
  "yew-router",
 ]

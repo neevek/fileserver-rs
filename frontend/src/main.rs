@@ -1,5 +1,7 @@
 #![allow(non_snake_case)]
 
+use std::fmt::Arguments;
+
 use common::{DirDesc, DirEntry, JsonRequest};
 use dioxus::{
     events::{ondragenter, FormData, FormEvent, MouseData},
@@ -13,6 +15,7 @@ use fast_qr::{
 use gloo_net::http::Request;
 use log::info;
 use reqwest::Url;
+use wasm_bindgen::JsValue;
 
 fn main() {
     dioxus::web::launch(app);
@@ -171,9 +174,11 @@ fn CreateDirectory(
         }
     };
 
-    let handle_upload_files = move |ev: FormEvent| {
-        info!(">>>>>> file:{:?}", ev.values);
+    let _handle_upload_files = move |ev: FormEvent| {
+        info!("upload: {:?}", ev.values);
     };
+
+    let action = format!("/api/upload/{}?filename=test", parent_dir);
 
     cx.render(rsx! {
         div {
@@ -198,16 +203,17 @@ fn CreateDirectory(
             div {
                 class: "card",
                 div { "Select files to upload to current directory" }
+
                 form {
-                    // prevent_default: "onsubmit",
+                    action: "{action}",
+                    prevent_default: "onsubmit",
                     // onsubmit: handle_upload_files,
-                    action: "/api/upload/test",
                     method: "post",
                     enctype: "multipart/form-data",
                     input {
                         r#type: "file",
                         name: "file",
-                        multiple: "true",
+                        multiple: "false",
                     }
                     input {
                         r#type: "submit",

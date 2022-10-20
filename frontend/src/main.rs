@@ -178,7 +178,8 @@ fn CreateDirectory(
         info!("upload: {:?}", ev.values);
     };
 
-    let action = format!("/api/upload/{}?filename=test", parent_dir);
+    let action = format!("/api/upload/{}", parent_dir);
+    // let action = format!("http://127.0.0.1:9999/{}", parent_dir);
 
     cx.render(rsx! {
         div {
@@ -212,8 +213,8 @@ fn CreateDirectory(
                     enctype: "multipart/form-data",
                     input {
                         r#type: "file",
-                        name: "file",
-                        multiple: "false",
+                        name: "filename",
+                        multiple: "true",
                     }
                     input {
                         r#type: "submit",

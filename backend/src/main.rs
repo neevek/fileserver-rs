@@ -1,24 +1,23 @@
-use axum::body::Bytes;
-use axum::extract::{BodyStream, Path, Query};
+use axum::extract::{Multipart, Path};
 use axum::http::StatusCode;
 use axum::response::Redirect;
 use axum::routing::post;
+use axum::Json;
 use axum::{response::IntoResponse, routing::get, Router};
-use axum::{BoxError, Json};
-use axum_extra::routing::SpaRouter;
 use chrono::{DateTime, Local};
 use clap::Parser;
 use common::{DirDesc, DirEntry, FileType, JsonRequest, JsonResponse};
-use futures::{Stream, TryStreamExt};
-use log::error;
+use futures::StreamExt;
+use futures::TryStreamExt;
+use log::info;
 use path_dedot::*;
 use serde::Deserialize;
+use std::io::Write;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::path::PathBuf;
 use std::str::FromStr;
-use tokio::fs::File;
-use tokio::io::{self, BufWriter};
-use tokio_util::io::StreamReader;
+use tokio::io::AsyncWriteExt;
+
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use walkdir::WalkDir;
@@ -63,6 +62,7 @@ async fn main() {
 
     match PathBuf::from(&opt.root_dir).parse_dot() {
         Ok(root_dir) if root_dir.is_dir() => {
+            info!("root_dir: {:?}", root_dir);
             unsafe {
                 ROOT_DIR = Some(root_dir.to_path_buf());
             }
@@ -74,9 +74,10 @@ async fn main() {
     }
 
     let app = Router::new()
-        .merge(SpaRouter::new("/static", unsafe {
-            ROOT_DIR.as_ref().unwrap().to_string_lossy().to_string()
-        }))
+        // .merge(SpaRouter::new("/static", unsafe {
+        //     ROOT_DIR.as_ref().unwrap().to_string_lossy().to_string()
+        // }))
+        .route("/api/listing/", get(serve_root).post(serve_root))
         .route("/api/listing/*path", get(list_files).post(create_dir))
         .route("/api/upload/*path", post(save_request_body))
         // .merge(SpaRouter::new("/assets", opt.static_dir))
@@ -125,65 +126,56 @@ struct UploadParams {
     filename: String,
 }
 
-async fn save_request_body(
-    Path(path): Path<String>,
-    Query(params): Query<UploadParams>,
-    body: BodyStream,
-) -> impl IntoResponse {
-    log::info!(
-        ">>>>>>>>>>>>>> upload path: {}, filename: {}",
-        path,
-        params.filename
-    );
-    save_file(path.as_str(), params.filename.as_str(), body).await
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+struct UploadForm {
+    filename: String,
 }
 
-async fn save_file(
-    subdir: &str,
-    filename: &str,
-    stream: BodyStream,
+async fn save_request_body(
+    Path(path): Path<String>,
+    mut multipart: Multipart,
 ) -> Result<Json<JsonResponse>, AppError> {
-    let dir;
-    unsafe {
-        dir = ROOT_DIR.as_ref().unwrap().to_path_buf().join(subdir);
-    }
+    let parent_dir = unsafe {
+        ROOT_DIR
+            .as_ref()
+            .unwrap()
+            .join(path.trim_start_matches('/'))
+    };
+    while let Some(mut field) = multipart
+        .next_field()
+        .await
+        .map_err(|_| AppError("failed to iterate over uploaded files".to_string()))?
+    {
+        let name = field.file_name().unwrap().to_string();
+        let filename = parent_dir.join(name.as_str());
+        let mut file = tokio::fs::File::create(filename).await.map_err(|_| {
+            AppError(format!(
+                "failed to create file at: {}/{}",
+                parent_dir.to_str().unwrap(),
+                name
+            ))
+        })?;
 
-    if !dir.is_dir() {
-        unsafe {
-            error!("error 1: {:?}, {:?}", ROOT_DIR, dir);
-        }
-        return Err(AppError::SaveFileFailed {
-            file_path: dir.to_str().unwrap().to_string(),
-        });
-    }
-
-    async {
-        let body_with_io_error = stream.map_err(|err| io::Error::new(io::ErrorKind::Other, err));
-        let body_reader = StreamReader::new(body_with_io_error);
-        futures::pin_mut!(body_reader);
-
-        log::info!("receive new uploaded file: {:?}", dir);
-
-        let path = dir.join(filename);
-        let mut file = BufWriter::new(File::create(path.clone()).await.map_err(|_| {
-            error!("error 2");
-            AppError::SaveFileFailed {
-                file_path: path.to_str().unwrap().to_string(),
-            }
-        })?);
-        error!("error 3");
-        tokio::io::copy(&mut body_reader, &mut file)
+        // save_file(path.as_str(), form.filename.as_str(), field.into_stream()).await
+        while let Some(chunk) = field
+            .chunk()
             .await
-            .map_err(|_| AppError::SaveFileFailed {
-                file_path: path.to_str().unwrap().to_string(),
-            })?;
-        return Ok::<_, AppError>(());
+            .map_err(|_| AppError(format!("failed to read from file: {}", name)))?
+        {
+            file.write(&chunk[..])
+                .await
+                .map_err(|_| AppError("failed to write file".to_string()))?;
+        }
     }
-    .await?;
 
     Ok(Json(JsonResponse::Succeeded {
-        msg: Some(format!("file uploaded: {}", filename)),
+        msg: Some(format!("file uploaded: {}", "file")),
     }))
+}
+
+async fn serve_root() -> impl IntoResponse {
+    list_files(Path("/".to_string())).await
 }
 
 async fn list_files(Path(path): Path<String>) -> impl IntoResponse {
@@ -257,20 +249,11 @@ fn convert_dir_entry(entry: &walkdir::DirEntry) -> DirEntry {
     }
 }
 
-enum AppError {
-    SaveFileFailed { file_path: String },
-}
+struct AppError(String);
 
 impl IntoResponse for AppError {
     fn into_response(self) -> axum::response::Response {
-        let (status_code, message) = match self {
-            AppError::SaveFileFailed { file_path } => (
-                StatusCode::OK,
-                format!("failed to save file to path: {}", file_path),
-            ),
-        };
-
-        let json_resp = Json(JsonResponse::Failed { msg: Some(message) });
-        (status_code, json_resp).into_response()
+        let json_resp = Json(JsonResponse::Failed { msg: Some(self.0) });
+        (StatusCode::OK, json_resp).into_response()
     }
 }

@@ -1,12 +1,7 @@
 #![allow(non_snake_case)]
 
-use std::fmt::Arguments;
-
 use common::{DirDesc, DirEntry, JsonRequest};
-use dioxus::{
-    events::{ondragenter, FormData, FormEvent, MouseData},
-    prelude::*,
-};
+use dioxus::{events::FormEvent, prelude::*};
 use dioxus_router::{use_router, Route, Router};
 use fast_qr::{
     convert::svg::{Shape, SvgBuilder},
@@ -15,7 +10,6 @@ use fast_qr::{
 use gloo_net::http::Request;
 use log::info;
 use reqwest::Url;
-use wasm_bindgen::JsValue;
 
 fn main() {
     dioxus::web::launch(app);
@@ -50,7 +44,13 @@ fn Listing(cx: Scope) -> Element {
             .await
     });
 
-    let create_dir_state: &UseState<Option<String>> = use_state(&cx, || None);
+    let update_state = use_state(&cx, || false);
+    if *update_state.get() {
+        update_state.set(false);
+        fut.restart();
+    }
+
+    let create_dir_state = use_state(&cx, || None as Option<String>);
     if let Some(dir_path) = create_dir_state.get() {
         create_dir_state.set(None);
         fut.restart();
@@ -77,7 +77,7 @@ fn Listing(cx: Scope) -> Element {
             }
 
             div {
-                ListingTable{ dir_desc: dir_desc, cur_url: &url },
+                ListingTable{ dir_desc: dir_desc, cur_url: &url, update_state: update_state },
             }
         ),
         Some(Err(err)) => rsx!("Error: {err}"),
@@ -116,6 +116,32 @@ fn QRCode<'a>(cx: Scope, data: &'a str) -> Element {
         dangerous_inner_html: "{svg}",
     }))
 }
+
+// #[inline_props]
+// fn AlertDialog<'a>(
+//     cx: Scope<'a>,
+//     msg: &'a str,
+//     positive_callback: Box<dyn Fn(MouseEvent) -> ()>,
+//     negative_callback: Box<dyn Fn(MouseEvent) -> ()>,
+// ) -> Element {
+//     cx.render(rsx!(div {
+//         "{msg}",
+
+//         input {
+//             prevent_default: "onclick",
+//             r#type: "button",
+//             onclick: positive_callback,
+//             value: "Yes"
+//         }
+
+//         input {
+//             prevent_default: "onclick",
+//             r#type: "button",
+//             onclick: negative_callback,
+//             value: "No"
+//         }
+//     }))
+// }
 
 #[derive(Props)]
 struct TooltipProps<'a> {
@@ -179,7 +205,6 @@ fn CreateDirectory(
     };
 
     let action = format!("/api/upload/{}", parent_dir);
-    // let action = format!("http://127.0.0.1:9999/{}", parent_dir);
 
     cx.render(rsx! {
         div {
@@ -230,6 +255,7 @@ fn CreateDirectory(
 pub struct DirDescProps<'a> {
     cur_url: &'a Url,
     dir_desc: &'a DirDesc,
+    update_state: &'a UseState<bool>,
 }
 
 fn ListingTable<'a>(cx: Scope<'a, DirDescProps<'a>>) -> Element {
@@ -259,6 +285,7 @@ fn ListingTable<'a>(cx: Scope<'a, DirDescProps<'a>>) -> Element {
     let url_base = use_state(&cx, || get_url_base(cx.props.cur_url));
 
     cx.render(rsx! {
+
         table {
             thead {
                 tr {
@@ -301,12 +328,14 @@ fn ListingTable<'a>(cx: Scope<'a, DirDescProps<'a>>) -> Element {
                     url_base: url_base.as_str(),
                     entry: entry,
                     cur_path: cur_path,
-                    qrcode_state: qrcode_state
+                    update_state: cx.props.update_state,
+                    qrcode_state: qrcode_state,
                 }))
 
         }
 
         qrcode,
+        // alert_dialog,
     })
 }
 
@@ -315,6 +344,7 @@ struct DirEntryProps<'a> {
     url_base: &'a str,
     entry: &'a DirEntry,
     cur_path: &'a str,
+    update_state: &'a UseState<bool>,
     qrcode_state: &'a UseState<Option<QRCodeParams>>,
 }
 
@@ -326,6 +356,12 @@ fn TableRow<'a>(cx: Scope<'a, DirEntryProps<'a>>) -> Element {
     };
 
     let entry = cx.props.entry;
+    let api_link = if entry.file_type == common::FileType::Directory {
+        format!("{}/{}", cx.props.cur_path, entry.file_name)
+    } else {
+        format!("/api/static{}/{}", cx.props.cur_path, entry.file_name)
+    };
+    let url = format!("{}/{}", url_base, api_link);
     cx.render(rsx! {
         tr {
             rsx!(th {
@@ -338,7 +374,7 @@ fn TableRow<'a>(cx: Scope<'a, DirEntryProps<'a>>) -> Element {
                             y: e.data.client_y + 20,
                             w: 240,
                             h: 240,
-                            url: format!("{}{}/{}", url_base, cx.props.cur_path, entry.file_name),
+                            url: url.clone(),
                         }));
                     },
                     onmouseout: move |_| {
@@ -348,7 +384,7 @@ fn TableRow<'a>(cx: Scope<'a, DirEntryProps<'a>>) -> Element {
                 }
 
                 a {
-                    href: "{cx.props.cur_path}/{entry.file_name}",
+                    href: "{api_link}",
                     if entry.file_type == common::FileType::Directory {
                         rsx!("📁 ")
                     } else {
@@ -360,8 +396,33 @@ fn TableRow<'a>(cx: Scope<'a, DirEntryProps<'a>>) -> Element {
 
             td { "{entry.file_size}" }
             td { "{entry.last_accessed}" }
-            td { "Delete" }
-        }
+                td {
+                    input {
+                        prevent_default: "onclick",
+                        r#type: "button",
+                        onclick: move |_| {
+                            let path = format!("/api/delete{}/{}", cx.props.cur_path, entry.file_name);
+                            let update_state = cx.props.update_state.clone();
+                            cx.spawn(async move {
+                                let resp = Request::post(path.as_str())
+                                    .send()
+                                    .await;
+
+                                match resp {
+                                    Ok(resp) => {
+                                        info!("succeeded: {:?}", resp);
+                                        update_state.set(true);
+                                    }
+                                    Err(err) => {
+                                        info!("failed: {}", err);
+                                    }
+                                }
+                            });
+                        },
+                        value: "Delete"
+                    }
+                }
+            }
     })
 }
 

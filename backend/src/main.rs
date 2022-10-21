@@ -1,28 +1,27 @@
 use axum::extract::{Multipart, Path};
 use axum::http::StatusCode;
 use axum::response::Redirect;
-use axum::routing::post;
+use axum::routing::{get_service, post};
 use axum::Json;
 use axum::{response::IntoResponse, routing::get, Router};
+use axum_extra::routing::SpaRouter;
 use chrono::{DateTime, Local};
 use clap::Parser;
 use common::{DirDesc, DirEntry, FileType, JsonRequest, JsonResponse};
-use futures::StreamExt;
-use futures::TryStreamExt;
 use log::info;
 use path_dedot::*;
 use serde::Deserialize;
-use std::io::Write;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::path::PathBuf;
 use std::str::FromStr;
 use tokio::io::AsyncWriteExt;
+use tower_http::services::ServeDir;
 
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use walkdir::WalkDir;
 
-static mut ROOT_DIR: Option<PathBuf> = None;
+static mut SERVE_DIR: Option<PathBuf> = None;
 
 // Setup the command line interface with clap.
 #[derive(Parser, Debug)]
@@ -44,9 +43,9 @@ struct Opt {
     #[clap(long = "static-dir", default_value = "../dist")]
     static_dir: String,
 
-    /// the root directory of the file server, default to the current directory if not specified
-    #[clap(long = "root-dir", default_value = ".")]
-    root_dir: String,
+    /// the directory to serve, default to the current directory if not specified
+    #[clap(long = "serve-dir", default_value = ".")]
+    serve_dir: String,
 }
 
 #[tokio::main]
@@ -60,27 +59,31 @@ async fn main() {
     // enable console logging
     tracing_subscriber::fmt::init();
 
-    match PathBuf::from(&opt.root_dir).parse_dot() {
-        Ok(root_dir) if root_dir.is_dir() => {
-            info!("root_dir: {:?}", root_dir);
+    match PathBuf::from(&opt.serve_dir).parse_dot() {
+        Ok(serve_dir) if serve_dir.is_dir() => {
+            info!("serve_dir: {:?}", serve_dir);
             unsafe {
-                ROOT_DIR = Some(root_dir.to_path_buf());
+                SERVE_DIR = Some(serve_dir.to_path_buf());
             }
-            log::info!("serving directory: {:?}", root_dir);
+            log::info!("serving directory: {:?}", serve_dir);
         }
         _ => {
-            panic!("root-dir must be a valid directory");
+            panic!("serve-dir must be a valid directory");
         }
     }
 
     let app = Router::new()
-        // .merge(SpaRouter::new("/static", unsafe {
-        //     ROOT_DIR.as_ref().unwrap().to_string_lossy().to_string()
-        // }))
-        .route("/api/listing/", get(serve_root).post(serve_root))
+        .route("/api/listing", get(serve_root).post(serve_root))
         .route("/api/listing/*path", get(list_files).post(create_dir))
         .route("/api/upload/*path", post(save_request_body))
-        // .merge(SpaRouter::new("/assets", opt.static_dir))
+        .nest(
+            "/api/static",
+            get_service(ServeDir::new(unsafe {
+                SERVE_DIR.as_ref().unwrap().to_string_lossy().to_string()
+            }))
+            .handle_error(|_| async move { AppError("Static file not found".to_string()) }),
+        )
+        .merge(SpaRouter::new("/assets", "./frontend/dist").index_file("index.html"))
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 
     let sock_addr = SocketAddr::from((
@@ -101,7 +104,7 @@ async fn create_dir(Path(path): Path<String>, Json(req): Json<JsonRequest>) -> i
         JsonRequest::CreateDirectory { dir_name } => {
             let full_path = format!(
                 "{}/{}/{}",
-                unsafe { ROOT_DIR.as_ref().unwrap().to_string_lossy().to_string() },
+                unsafe { SERVE_DIR.as_ref().unwrap().to_string_lossy().to_string() },
                 path.to_string(),
                 dir_name
             );
@@ -137,7 +140,7 @@ async fn save_request_body(
     mut multipart: Multipart,
 ) -> Result<Json<JsonResponse>, AppError> {
     let parent_dir = unsafe {
-        ROOT_DIR
+        SERVE_DIR
             .as_ref()
             .unwrap()
             .join(path.trim_start_matches('/'))
@@ -157,13 +160,13 @@ async fn save_request_body(
             ))
         })?;
 
-        // save_file(path.as_str(), form.filename.as_str(), field.into_stream()).await
         while let Some(chunk) = field
             .chunk()
             .await
-            .map_err(|_| AppError(format!("failed to read from file: {}", name)))?
+            .map_err(|_| AppError(format!("failed to read from file: {}", name)))
+            .unwrap()
         {
-            file.write(&chunk[..])
+            file.write_all(&chunk[..])
                 .await
                 .map_err(|_| AppError("failed to write file".to_string()))?;
         }
@@ -181,7 +184,7 @@ async fn serve_root() -> impl IntoResponse {
 async fn list_files(Path(path): Path<String>) -> impl IntoResponse {
     let mut abs_path;
     unsafe {
-        abs_path = ROOT_DIR.as_ref().unwrap().to_path_buf();
+        abs_path = SERVE_DIR.as_ref().unwrap().to_path_buf();
     }
     let path = path.trim_start_matches('/');
     abs_path.push(path);
@@ -249,6 +252,7 @@ fn convert_dir_entry(entry: &walkdir::DirEntry) -> DirEntry {
     }
 }
 
+#[derive(Debug)]
 struct AppError(String);
 
 impl IntoResponse for AppError {

@@ -1,12 +1,7 @@
 #![allow(non_snake_case)]
 
-use std::fmt::Arguments;
-
 use common::{DirDesc, DirEntry, JsonRequest};
-use dioxus::{
-    events::{ondragenter, FormData, FormEvent, MouseData},
-    prelude::*,
-};
+use dioxus::{events::FormEvent, prelude::*};
 use dioxus_router::{use_router, Route, Router};
 use fast_qr::{
     convert::svg::{Shape, SvgBuilder},
@@ -15,7 +10,6 @@ use fast_qr::{
 use gloo_net::http::Request;
 use log::info;
 use reqwest::Url;
-use wasm_bindgen::JsValue;
 
 fn main() {
     dioxus::web::launch(app);
@@ -179,7 +173,6 @@ fn CreateDirectory(
     };
 
     let action = format!("/api/upload/{}", parent_dir);
-    // let action = format!("http://127.0.0.1:9999/{}", parent_dir);
 
     cx.render(rsx! {
         div {
@@ -326,6 +319,12 @@ fn TableRow<'a>(cx: Scope<'a, DirEntryProps<'a>>) -> Element {
     };
 
     let entry = cx.props.entry;
+    let link = if entry.file_type == common::FileType::Directory {
+        format!("{}/{}", cx.props.cur_path, entry.file_name)
+    } else {
+        format!("/api/static{}/{}", cx.props.cur_path, entry.file_name)
+    };
+    let url = format!("{}/{}", url_base, link);
     cx.render(rsx! {
         tr {
             rsx!(th {
@@ -338,7 +337,7 @@ fn TableRow<'a>(cx: Scope<'a, DirEntryProps<'a>>) -> Element {
                             y: e.data.client_y + 20,
                             w: 240,
                             h: 240,
-                            url: format!("{}{}/{}", url_base, cx.props.cur_path, entry.file_name),
+                            url: url.clone(),
                         }));
                     },
                     onmouseout: move |_| {
@@ -348,7 +347,7 @@ fn TableRow<'a>(cx: Scope<'a, DirEntryProps<'a>>) -> Element {
                 }
 
                 a {
-                    href: "{cx.props.cur_path}/{entry.file_name}",
+                    href: "{link}",
                     if entry.file_type == common::FileType::Directory {
                         rsx!("📁 ")
                     } else {

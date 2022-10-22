@@ -9,6 +9,7 @@ use chrono::{DateTime, Local};
 use clap::Parser;
 use common::{DirDesc, DirEntry, FileType, JsonRequest, JsonResponse};
 use log::info;
+use path_absolutize::Absolutize;
 use path_dedot::*;
 use serde::Deserialize;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
@@ -125,21 +126,22 @@ async fn create_dir(Path(path): Path<String>, Json(req): Json<JsonRequest>) -> i
 }
 
 async fn delete_path(Path(path): Path<String>) -> impl IntoResponse {
-    let str_path = format!(
-        "{}/{}",
-        unsafe { SERVE_DIR.as_ref().unwrap().to_string_lossy().to_string() },
-        path.to_string(),
-    );
+    let parent_dir = unsafe { SERVE_DIR.as_ref().unwrap() };
+    let full_path = parent_dir.join(path.trim_start_matches('/'));
 
     let mut error_msg: Option<String> = None;
-    let full_path = PathBuf::from(str_path);
-    if full_path.is_file() {
-        if let Err(e) = std::fs::remove_file(full_path) {
-            error_msg = Some(format!("failed to remove file: {}, error: {}", path, e));
-        }
-    } else if full_path.is_dir() {
-        if let Err(e) = std::fs::remove_dir_all(full_path) {
-            error_msg = Some(format!("failed to remove dir: {}, error: {}", path, e));
+
+    if !full_path.absolutize().unwrap().starts_with(parent_dir) {
+        error_msg = Some(format!("invalid path: {:?}", full_path));
+    } else {
+        if full_path.is_file() {
+            if let Err(e) = std::fs::remove_file(full_path) {
+                error_msg = Some(format!("failed to remove file: {}, error: {}", path, e));
+            }
+        } else if full_path.is_dir() {
+            if let Err(e) = std::fs::remove_dir_all(full_path) {
+                error_msg = Some(format!("failed to remove dir: {}, error: {}", path, e));
+            }
         }
     }
 
@@ -174,6 +176,8 @@ async fn save_request_body(
             .unwrap()
             .join(path.trim_start_matches('/'))
     };
+
+    let mut count = 0;
     while let Some(mut field) = multipart
         .next_field()
         .await
@@ -199,10 +203,12 @@ async fn save_request_body(
                 .await
                 .map_err(|_| AppError("failed to write file".to_string()))?;
         }
+
+        count += 1;
     }
 
     Ok(Json(JsonResponse::Succeeded {
-        msg: Some(format!("file uploaded: {}", "file")),
+        msg: Some(format!("{} file(s) uploaded!", count)),
     }))
 }
 

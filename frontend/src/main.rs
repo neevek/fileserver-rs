@@ -76,89 +76,11 @@ fn Listing(cx: Scope) -> Element {
                 create_dir_state: create_dir_state.clone(),
             }
 
-            div {
-                ListingTable{ dir_desc: dir_desc, cur_url: &url, update_state: update_state },
-            }
+            ListingTable{ dir_desc: dir_desc, cur_url: &url, update_state: update_state },
         ),
         Some(Err(err)) => rsx!("Error: {err}"),
         _ => rsx!("Loading..."),
     })
-}
-
-fn get_url_base(url: &Url) -> String {
-    match url.host_str() {
-        Some(host_str) => {
-            let scheme = url.scheme();
-            let port = url.port().unwrap_or_default();
-            if port > 0 {
-                format!("{}://{}:{}", scheme, host_str, port)
-            } else {
-                format!("{}://{}", scheme, host_str)
-            }
-        }
-        None => "".to_string(),
-    }
-}
-
-#[inline_props]
-fn QRCode<'a>(cx: Scope, data: &'a str) -> Element {
-    let qrcode = QRBuilder::new(data.to_string())
-        .ecl(ECL::L)
-        .version(Version::V09)
-        .build();
-
-    let svg = SvgBuilder::default()
-        .shape(Shape::RoundedSquare)
-        .to_str(&qrcode.unwrap());
-
-    cx.render(rsx!(div {
-        class: "qrcode",
-        dangerous_inner_html: "{svg}",
-    }))
-}
-
-// #[inline_props]
-// fn AlertDialog<'a>(
-//     cx: Scope<'a>,
-//     msg: &'a str,
-//     positive_callback: Box<dyn Fn(MouseEvent) -> ()>,
-//     negative_callback: Box<dyn Fn(MouseEvent) -> ()>,
-// ) -> Element {
-//     cx.render(rsx!(div {
-//         "{msg}",
-
-//         input {
-//             prevent_default: "onclick",
-//             r#type: "button",
-//             onclick: positive_callback,
-//             value: "Yes"
-//         }
-
-//         input {
-//             prevent_default: "onclick",
-//             r#type: "button",
-//             onclick: negative_callback,
-//             value: "No"
-//         }
-//     }))
-// }
-
-#[derive(Props)]
-struct TooltipProps<'a> {
-    w: i32,
-    h: i32,
-    x: i32,
-    y: i32,
-    children: Element<'a>,
-}
-
-fn Tooltip<'a>(cx: Scope<'a, TooltipProps<'a>>) -> Element {
-    let props = cx.props;
-    cx.render(rsx!(div {
-        class: "tooltip",
-        style: "width:{props.w}px; height:{props.h}px; left:{props.x}px; top:{props.y}px;",
-        &props.children
-    }))
 }
 
 #[inline_props]
@@ -204,7 +126,7 @@ fn CreateDirectory(
         info!("upload: {:?}", ev.values);
     };
 
-    let action = format!("/api/upload/{}", parent_dir);
+    let action = format!("/api/upload{}", parent_dir);
 
     cx.render(rsx! {
         div {
@@ -249,13 +171,6 @@ fn CreateDirectory(
             }
         }
     })
-}
-
-#[derive(Props)]
-pub struct DirDescProps<'a> {
-    cur_url: &'a Url,
-    dir_desc: &'a DirDesc,
-    update_state: &'a UseState<bool>,
 }
 
 fn ListingTable<'a>(cx: Scope<'a, DirDescProps<'a>>) -> Element {
@@ -311,8 +226,8 @@ fn ListingTable<'a>(cx: Scope<'a, DirDescProps<'a>>) -> Element {
             cx.props.dir_desc.descendants.is_empty().then(|| rsx!{
                 tr {
                     th {
-                        class: "empty_directory",
                         colspan: "4",
+                        class: "empty_directory",
                         "This directory is empty."
                     }
                 }
@@ -335,17 +250,7 @@ fn ListingTable<'a>(cx: Scope<'a, DirDescProps<'a>>) -> Element {
         }
 
         qrcode,
-        // alert_dialog,
     })
-}
-
-#[derive(Props)]
-struct DirEntryProps<'a> {
-    url_base: &'a str,
-    entry: &'a DirEntry,
-    cur_path: &'a str,
-    update_state: &'a UseState<bool>,
-    qrcode_state: &'a UseState<Option<QRCodeParams>>,
 }
 
 fn TableRow<'a>(cx: Scope<'a, DirEntryProps<'a>>) -> Element {
@@ -424,6 +329,98 @@ fn TableRow<'a>(cx: Scope<'a, DirEntryProps<'a>>) -> Element {
                 }
             }
     })
+}
+
+#[inline_props]
+fn QRCode<'a>(cx: Scope, data: &'a str) -> Element {
+    let qrcode = QRBuilder::new(data.to_string())
+        .ecl(ECL::L)
+        .version(Version::V09)
+        .build();
+
+    let svg = SvgBuilder::default()
+        .shape(Shape::RoundedSquare)
+        .to_str(&qrcode.unwrap());
+
+    cx.render(rsx!(div {
+        class: "qrcode",
+        dangerous_inner_html: "{svg}",
+    }))
+}
+
+fn get_url_base(url: &Url) -> String {
+    match url.host_str() {
+        Some(host_str) => {
+            let scheme = url.scheme();
+            let port = url.port().unwrap_or_default();
+            if port > 0 {
+                format!("{}://{}:{}", scheme, host_str, port)
+            } else {
+                format!("{}://{}", scheme, host_str)
+            }
+        }
+        None => "".to_string(),
+    }
+}
+
+fn Tooltip<'a>(cx: Scope<'a, TooltipProps<'a>>) -> Element {
+    let props = cx.props;
+    cx.render(rsx!(div {
+        class: "tooltip",
+        style: "width:{props.w}px; height:{props.h}px; left:{props.x}px; top:{props.y}px;",
+        &props.children
+    }))
+}
+
+// #[inline_props]
+// fn AlertDialog<'a>(
+//     cx: Scope<'a>,
+//     msg: &'a str,
+//     positive_callback: Box<dyn Fn(MouseEvent) -> ()>,
+//     negative_callback: Box<dyn Fn(MouseEvent) -> ()>,
+// ) -> Element {
+//     cx.render(rsx!(div {
+//         "{msg}",
+
+//         input {
+//             prevent_default: "onclick",
+//             r#type: "button",
+//             onclick: positive_callback,
+//             value: "Yes"
+//         }
+
+//         input {
+//             prevent_default: "onclick",
+//             r#type: "button",
+//             onclick: negative_callback,
+//             value: "No"
+//         }
+//     }))
+// }
+
+#[derive(Props)]
+struct TooltipProps<'a> {
+    w: i32,
+    h: i32,
+    x: i32,
+    y: i32,
+    children: Element<'a>,
+}
+
+#[derive(Props)]
+pub struct DirDescProps<'a> {
+    cur_url: &'a Url,
+    dir_desc: &'a DirDesc,
+    update_state: &'a UseState<bool>,
+}
+
+#[derive(Props)]
+struct DirEntryProps<'a> {
+    url_base: &'a str,
+    entry: &'a DirEntry,
+    cur_path: &'a str,
+    update_state: &'a UseState<bool>,
+    qrcode_state: &'a UseState<Option<QRCodeParams>>,
 }
 
 struct QRCodeParams {

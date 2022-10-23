@@ -8,7 +8,7 @@ use fast_qr::{
     QRBuilder, Version, ECL,
 };
 use gloo_net::http::Request;
-use log::info;
+use log::{error, info};
 use reqwest::Url;
 
 fn main() {
@@ -63,6 +63,8 @@ fn Listing(cx: Scope) -> Element {
         });
     }
 
+    let info_state = use_state(&cx, || None as Option<String>);
+
     cx.render(match fut.value() {
         Some(Ok(dir_desc)) => rsx!(
             div {
@@ -76,7 +78,9 @@ fn Listing(cx: Scope) -> Element {
                 create_dir_state: create_dir_state.clone(),
             }
 
-            ListingTable{ dir_desc: dir_desc, cur_url: &url, update_state: update_state },
+            ListingTable{ dir_desc: dir_desc, cur_url: &url, update_state: update_state, info_state: info_state },
+
+            InfoDialog { info_state: info_state }
         ),
         Some(Err(err)) => rsx!("Error: {err}"),
         _ => rsx!("Loading..."),
@@ -244,6 +248,7 @@ fn ListingTable<'a>(cx: Scope<'a, DirDescProps<'a>>) -> Element {
                     entry: entry,
                     cur_path: cur_path,
                     update_state: cx.props.update_state,
+                    info_state: cx.props.info_state,
                     qrcode_state: qrcode_state,
                 }))
 
@@ -286,6 +291,37 @@ fn TableRow<'a>(cx: Scope<'a, DirEntryProps<'a>>) -> Element {
                         cx.props.qrcode_state.set(None)
                     },
                     img { src:"data:image/x-icon;base64,AAABAAEAEBACAAAAAACwAAAAFgAAACgAAAAQAAAAIAAAAAEAAQAAAAAAQAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAA////AAKnAAB6MgAASlIAAEtCAAB7AAAAAnkAAP/YAACDBQAAUGMAAPy/AAACQAAAel4AAEpSAABK0gAAel4AAAJAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", alt:"QRCode" }
+                }
+
+                a {
+                    href: "#",
+                    prevent_default: "onclick",
+                    onclick: move |_| {
+                        let path = format!("/api/ffprobe{}/{}", cx.props.cur_path, entry.file_name);
+                        let info_state = cx.props.info_state.clone();
+                        cx.spawn(async move {
+                            let resp = Request::get(path.as_str())
+                                .send()
+                                .await;
+
+                            match resp {
+                                Ok(resp) => {
+                                    let text = resp.text().await.unwrap_or("".to_string());
+                                    if text.is_empty() || text == "\"{\\n\\n}\\n\"" {
+                                        info_state.set(Some("Not Available!".to_string()));
+                                    } else {
+                                        let json_resp: serde_json::Value = serde_json::from_str(text.as_str()).unwrap_or(serde_json::Value::default());
+                                        let json_str = json_resp.to_string().replace("\\n", "\n").replace("\\", "");
+                                        info_state.set(Some(json_str));
+                                    }
+                                }
+                                Err(err) => {
+                                    error!("failed: {}", err);
+                                }
+                            }
+                        });
+                    },
+                    "ℹ️ ",
                 }
 
                 a {
@@ -398,6 +434,61 @@ fn Tooltip<'a>(cx: Scope<'a, TooltipProps<'a>>) -> Element {
 //     }))
 // }
 
+#[inline_props]
+fn InfoDialog<'a>(cx: Scope<'a>, info_state: &'a UseState<Option<String>>) -> Element {
+    cx.render(if let Some(str_info) = info_state.get() {
+        rsx!(div {
+            style: "
+                position: fixed;
+                width: 860px;
+                height: 640px;
+                left: 50%;
+                margin-left: -430px;
+                top: 50%;
+                margin-top: -320px;
+                z-index: 20;
+                border-radius: 5px;
+                border: 2px solid #ccc;
+                background: #eee;
+                overflow: scroll;
+            ",
+            textarea {
+                style: "
+                    width:850px;
+                    height: 580px;
+                    margin:5px;
+                    border: none;
+                    box-sizing:border-box;
+                    resize: none;
+                    border-bottom: 2px solid #ccc;
+                ",
+                disabled: "true",
+                value: "{str_info}",
+            }
+            p {
+                style: "
+                    text-align: center;
+                    width: 100%;
+                    position: absolute;
+                    bottom: 0px;
+                    margin:0px;
+                    box-sizing:border-box;
+                    padding: 10px;
+                ",
+                input {
+                    style: "width: 200px; height: 30px",
+                    prevent_default: "onclick",
+                    r#type: "button",
+                    value: "Close",
+                    onclick: |_| info_state.set(None),
+                }
+            }
+        })
+    } else {
+        rsx!("")
+    })
+}
+
 #[derive(Props)]
 struct TooltipProps<'a> {
     w: i32,
@@ -412,6 +503,7 @@ pub struct DirDescProps<'a> {
     cur_url: &'a Url,
     dir_desc: &'a DirDesc,
     update_state: &'a UseState<bool>,
+    info_state: &'a UseState<Option<String>>,
 }
 
 #[derive(Props)]
@@ -421,6 +513,7 @@ struct DirEntryProps<'a> {
     cur_path: &'a str,
     update_state: &'a UseState<bool>,
     qrcode_state: &'a UseState<Option<QRCodeParams>>,
+    info_state: &'a UseState<Option<String>>,
 }
 
 struct QRCodeParams {

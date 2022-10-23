@@ -14,6 +14,7 @@ use path_dedot::*;
 use serde::Deserialize;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::path::PathBuf;
+use std::process::Command;
 use std::str::FromStr;
 use tokio::io::AsyncWriteExt;
 use tower_http::services::ServeDir;
@@ -78,6 +79,7 @@ async fn main() {
         .route("/api/listing/*path", get(list_files).post(create_dir))
         .route("/api/upload/*path", post(save_request_body))
         .route("/api/delete/*path", post(delete_path))
+        .route("/api/ffprobe/*path", get(ffprobe))
         .nest(
             "/api/static",
             get_service(ServeDir::new(unsafe {
@@ -217,18 +219,15 @@ async fn serve_root() -> impl IntoResponse {
 }
 
 async fn list_files(Path(path): Path<String>) -> impl IntoResponse {
-    let mut abs_path;
-    unsafe {
-        abs_path = SERVE_DIR.as_ref().unwrap().to_path_buf();
-    }
     let path = path.trim_start_matches('/');
-    abs_path.push(path);
+    let parent_dir = unsafe { SERVE_DIR.as_ref().unwrap() };
+    let full_path = parent_dir.join(path.trim_start_matches('/'));
 
-    log::debug!("list files for path: {:?}", abs_path);
+    log::debug!("list files for path: {:?}", full_path);
 
-    if abs_path.is_dir() {
+    if full_path.is_dir() {
         let mut descendants = vec![];
-        for entry in WalkDir::new(&abs_path)
+        for entry in WalkDir::new(&full_path)
             .follow_links(true)
             .max_depth(1)
             .into_iter()
@@ -246,7 +245,7 @@ async fn list_files(Path(path): Path<String>) -> impl IntoResponse {
         };
 
         return (StatusCode::OK, Json(dir_desc)).into_response();
-    } else if abs_path.is_symlink() || abs_path.is_file() {
+    } else if full_path.is_symlink() || full_path.is_file() {
         return Redirect::permanent(format!("/static/{}", path).as_str()).into_response();
     }
 
@@ -285,6 +284,35 @@ fn convert_dir_entry(entry: &walkdir::DirEntry) -> DirEntry {
         file_size,
         last_accessed,
     }
+}
+
+async fn ffprobe(Path(path): Path<String>) -> impl IntoResponse {
+    let path = path.trim_start_matches('/');
+    let parent_dir = unsafe { SERVE_DIR.as_ref().unwrap() };
+    let full_path = parent_dir.join(path.trim_start_matches('/'));
+
+    if full_path.is_file() {
+        if let Ok(output) = Command::new("ffprobe")
+            .args([
+                "-v",
+                "quiet",
+                "-print_format",
+                "json",
+                "-show_format",
+                "-show_streams",
+            ])
+            .arg(full_path)
+            .output()
+        {
+            let json_str = String::from_utf8(output.stdout).unwrap_or("{}".to_string());
+            return (StatusCode::OK, Json(json_str)).into_response();
+        }
+    }
+
+    let json_resp = Json(JsonResponse::Failed {
+        msg: Some("ffprobe not found".to_string()),
+    });
+    (StatusCode::OK, json_resp).into_response()
 }
 
 #[derive(Debug)]

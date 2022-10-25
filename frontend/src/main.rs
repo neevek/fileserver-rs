@@ -274,7 +274,7 @@ fn TableRow<'a>(cx: Scope<'a, DirEntryProps<'a>>) -> Element {
     } else {
         format!("/api/static{}/{}", cx.props.cur_path, entry.file_name)
     };
-    let url = format!("{}/{}", url_base, api_link);
+    let url = format!("{}/{}", url_base, api_link.trim_start_matches('/'));
     cx.render(rsx! {
         tr {
             rsx!(th {

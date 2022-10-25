@@ -190,17 +190,9 @@ fn ListingTable<'a>(cx: Scope<'a, DirDescProps<'a>>) -> Element {
         }
     }
 
-    let qrcode_state: &UseState<Option<QRCodeParams>> = use_state(&cx, || None);
+    let qrcode_state: &UseState<Option<String>> = use_state(&cx, || None);
     let qrcode = match qrcode_state.get() {
-        Some(qrcode_params) => Some(rsx!(Tooltip {
-            w: qrcode_params.w,
-            h: qrcode_params.h,
-            x: qrcode_params.x,
-            y: qrcode_params.y,
-            QRCode {
-                data: qrcode_params.url.as_str()
-            }
-        })),
+        Some(url) => Some(rsx!(QRCode { data: url.as_str() })),
         _ => None,
     };
 
@@ -274,61 +266,12 @@ fn TableRow<'a>(cx: Scope<'a, DirEntryProps<'a>>) -> Element {
     } else {
         format!("/api/static{}/{}", cx.props.cur_path, entry.file_name)
     };
+
     let url = format!("{}/{}", url_base, api_link.trim_start_matches('/'));
+    let formatted_bytes = format_bytes(entry.file_size);
     cx.render(rsx! {
         tr {
             rsx!(th {
-                a {
-                    href: "#",
-                    style: "margin-right: 8px",
-                    onmouseover: move |e| {
-                        cx.props.qrcode_state.set(Some(QRCodeParams {
-                            x: e.data.client_x + 20,
-                            y: e.data.client_y + 20,
-                            w: 240,
-                            h: 240,
-                            url: url.clone(),
-                        }));
-                    },
-                    onmouseout: move |_| {
-                        cx.props.qrcode_state.set(None)
-                    },
-                    img { src:"data:image/x-icon;base64,AAABAAEAEBACAAAAAACwAAAAFgAAACgAAAAQAAAAIAAAAAEAAQAAAAAAQAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAA////AAKnAAB6MgAASlIAAEtCAAB7AAAAAnkAAP/YAACDBQAAUGMAAPy/AAACQAAAel4AAEpSAABK0gAAel4AAAJAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", alt:"QRCode" }
-                }
-
-                (entry.file_type == common::FileType::File).then(|| rsx!(
-                    a {
-                        href: "#",
-                        prevent_default: "onclick",
-                        onclick: move |_| {
-                            let path = format!("/api/ffprobe{}/{}", cx.props.cur_path, entry.file_name);
-                            let info_state = cx.props.info_state.clone();
-                            cx.spawn(async move {
-                                let resp = Request::get(path.as_str())
-                                    .send()
-                                    .await;
-
-                                match resp {
-                                    Ok(resp) => {
-                                        let text = resp.text().await.unwrap_or("".to_string());
-                                        if text.is_empty() || text == "\"{\\n\\n}\\n\"" {
-                                            info_state.set(Some("Not Available!".to_string()));
-                                        } else {
-                                            let json_resp: serde_json::Value = serde_json::from_str(text.as_str()).unwrap_or(serde_json::Value::default());
-                                            let json_str = json_resp.to_string().replace("\\n", "\n").replace("\\", "");
-                                            info_state.set(Some(json_str));
-                                        }
-                                    }
-                                    Err(err) => {
-                                        error!("failed: {}", err);
-                                    }
-                                }
-                            });
-                        },
-                        "ℹ️ ",
-                    }
-                )),
-
                 a {
                     href: "{api_link}",
                     if entry.file_type == common::FileType::Directory {
@@ -340,9 +283,55 @@ fn TableRow<'a>(cx: Scope<'a, DirEntryProps<'a>>) -> Element {
                 }
             })
 
-            td { "{entry.file_size}" }
+            td { "{formatted_bytes}" }
             td { "{entry.last_accessed}" }
                 td {
+
+                    (entry.file_type == common::FileType::File).then(|| rsx!(
+                        input {
+                            prevent_default: "onclick",
+                            r#type: "button",
+                            style: "margin-right: 8px",
+                            onclick: move |_| {
+                                let path = format!("/api/ffprobe{}/{}", cx.props.cur_path, entry.file_name);
+                                let info_state = cx.props.info_state.clone();
+                                cx.spawn(async move {
+                                    let resp = Request::get(path.as_str())
+                                        .send()
+                                        .await;
+
+                                    match resp {
+                                        Ok(resp) => {
+                                            let text = resp.text().await.unwrap_or("".to_string());
+                                            if text.is_empty() || text == "\"{\\n\\n}\\n\"" {
+                                                info_state.set(Some("Not Available!".to_string()));
+                                            } else {
+                                                let json_resp: serde_json::Value = serde_json::from_str(text.as_str()).unwrap_or(serde_json::Value::default());
+                                                let json_str = json_resp.to_string().replace("\\n", "\n").replace("\\", "");
+                                                info_state.set(Some(json_str));
+                                            }
+                                        }
+                                        Err(err) => {
+                                            error!("failed: {}", err);
+                                        }
+                                    }
+                                });
+                            },
+                            value: "MediaInfo",
+                        }
+                    )),
+
+                    input {
+                        prevent_default: "onclick",
+                        r#type: "button",
+                        style: "margin-right: 8px",
+                        onclick: move |_| cx.props.qrcode_state.set(Some(url.clone())),
+                        onmouseout: move |_| {
+                            cx.props.qrcode_state.set(None)
+                        },
+                        value: "QRCode"
+                    }
+
                     input {
                         prevent_default: "onclick",
                         r#type: "button",
@@ -384,7 +373,17 @@ fn QRCode<'a>(cx: Scope, data: &'a str) -> Element {
         .to_str(&qrcode.unwrap());
 
     cx.render(rsx!(div {
-        class: "qrcode",
+        style: "
+            position: fixed;
+            width: 360px;
+            height: 360px;
+            left: 50%;
+            top: 50%;
+            margin-left: -180px;
+            margin-top: -180px;
+            z-index: 100;
+            border: dotted 2px #000;
+        ",
         dangerous_inner_html: "{svg}",
     }))
 }
@@ -403,41 +402,6 @@ fn get_url_base(url: &Url) -> String {
         None => "".to_string(),
     }
 }
-
-fn Tooltip<'a>(cx: Scope<'a, TooltipProps<'a>>) -> Element {
-    let props = cx.props;
-    cx.render(rsx!(div {
-        class: "tooltip",
-        style: "width:{props.w}px; height:{props.h}px; left:{props.x}px; top:{props.y}px;",
-        &props.children
-    }))
-}
-
-// #[inline_props]
-// fn AlertDialog<'a>(
-//     cx: Scope<'a>,
-//     msg: &'a str,
-//     positive_callback: Box<dyn Fn(MouseEvent) -> ()>,
-//     negative_callback: Box<dyn Fn(MouseEvent) -> ()>,
-// ) -> Element {
-//     cx.render(rsx!(div {
-//         "{msg}",
-
-//         input {
-//             prevent_default: "onclick",
-//             r#type: "button",
-//             onclick: positive_callback,
-//             value: "Yes"
-//         }
-
-//         input {
-//             prevent_default: "onclick",
-//             r#type: "button",
-//             onclick: negative_callback,
-//             value: "No"
-//         }
-//     }))
-// }
 
 #[inline_props]
 fn InfoDialog<'a>(cx: Scope<'a>, info_state: &'a UseState<Option<String>>) -> Element {
@@ -494,14 +458,61 @@ fn InfoDialog<'a>(cx: Scope<'a>, info_state: &'a UseState<Option<String>>) -> El
     })
 }
 
-#[derive(Props)]
-struct TooltipProps<'a> {
-    w: i32,
-    h: i32,
-    x: i32,
-    y: i32,
-    children: Element<'a>,
+fn format_bytes(bytes: u64) -> String {
+    if bytes >= 1024 * 1024 * 1024 {
+        format!("{:.2}G", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+    } else if bytes >= 1024 * 1024 {
+        format!("{:.2}M", bytes as f64 / (1024.0 * 1024.0))
+    } else if bytes >= 1024 {
+        format!("{:.2}K", bytes as f64 / 1024.0)
+    } else {
+        format!("{}", bytes)
+    }
 }
+
+// fn Tooltip<'a>(cx: Scope<'a, TooltipProps<'a>>) -> Element {
+//     let props = cx.props;
+//     cx.render(rsx!(div {
+//         class: "tooltip",
+//         style: "width:{props.w}px; height:{props.h}px; left:{props.x}px; top:{props.y}px;",
+//         &props.children
+//     }))
+// }
+
+// #[inline_props]
+// fn AlertDialog<'a>(
+//     cx: Scope<'a>,
+//     msg: &'a str,
+//     positive_callback: Box<dyn Fn(MouseEvent) -> ()>,
+//     negative_callback: Box<dyn Fn(MouseEvent) -> ()>,
+// ) -> Element {
+//     cx.render(rsx!(div {
+//         "{msg}",
+
+//         input {
+//             prevent_default: "onclick",
+//             r#type: "button",
+//             onclick: positive_callback,
+//             value: "Yes"
+//         }
+
+//         input {
+//             prevent_default: "onclick",
+//             r#type: "button",
+//             onclick: negative_callback,
+//             value: "No"
+//         }
+//     }))
+// }
+
+// #[derive(Props)]
+// struct TooltipProps<'a> {
+//     w: i32,
+//     h: i32,
+//     x: i32,
+//     y: i32,
+//     children: Element<'a>,
+// }
 
 #[derive(Props)]
 pub struct DirDescProps<'a> {
@@ -517,14 +528,6 @@ struct DirEntryProps<'a> {
     entry: &'a DirEntry,
     cur_path: &'a str,
     update_state: &'a UseState<bool>,
-    qrcode_state: &'a UseState<Option<QRCodeParams>>,
+    qrcode_state: &'a UseState<Option<String>>,
     info_state: &'a UseState<Option<String>>,
-}
-
-struct QRCodeParams {
-    w: i32,
-    h: i32,
-    x: i32,
-    y: i32,
-    url: String,
 }

@@ -8,6 +8,7 @@ use axum_extra::routing::SpaRouter;
 use chrono::{DateTime, Local};
 use clap::Parser;
 use common::{DirDesc, DirEntry, FileType, JsonRequest, JsonResponse};
+use local_ip_address::local_ip;
 use log::info;
 use path_absolutize::Absolutize;
 use path_dedot::*;
@@ -85,6 +86,17 @@ async fn main() {
         }
     };
 
+    let mut ip_addr = None;
+    if opt.addr == "0.0.0.0" {
+        if let Ok(ip) = local_ip() {
+            ip_addr = Some(ip);
+        }
+    }
+    if ip_addr == None {
+        ip_addr =
+            Some(IpAddr::from_str(opt.addr.as_str()).unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST)));
+    }
+
     let app = Router::new()
         .route("/api/listing", get(serve_root).post(serve_root))
         .route("/api/listing/*path", get(list_files).post(create_dir))
@@ -101,10 +113,7 @@ async fn main() {
         .merge(SpaRouter::new("/assets", assets_dir).index_file("index.html"))
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 
-    let sock_addr = SocketAddr::from((
-        IpAddr::from_str(opt.addr.as_str()).unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST)),
-        opt.port,
-    ));
+    let sock_addr = SocketAddr::from((ip_addr.unwrap(), opt.port));
 
     log::info!("listening on http://{}", sock_addr);
 

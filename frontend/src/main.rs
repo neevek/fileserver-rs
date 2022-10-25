@@ -170,9 +170,8 @@ fn CreateDirectory(
                         name: "filename",
                         multiple: "true",
                     }
-                    input {
-                        r#type: "submit",
-                        value: "Upload"
+                    button {
+                        "Upload"
                     }
                 }
             }
@@ -288,7 +287,7 @@ fn TableRow<'a>(cx: Scope<'a, DirEntryProps<'a>>) -> Element {
                 td {
 
                     (entry.file_type == common::FileType::File).then(|| rsx!(
-                        input {
+                        button {
                             prevent_default: "onclick",
                             r#type: "button",
                             style: "margin-right: 8px",
@@ -317,11 +316,11 @@ fn TableRow<'a>(cx: Scope<'a, DirEntryProps<'a>>) -> Element {
                                     }
                                 });
                             },
-                            value: "MediaInfo",
+                            "MediaInfo",
                         }
                     )),
 
-                    input {
+                    button {
                         prevent_default: "onclick",
                         r#type: "button",
                         style: "margin-right: 8px",
@@ -329,10 +328,10 @@ fn TableRow<'a>(cx: Scope<'a, DirEntryProps<'a>>) -> Element {
                         onmouseout: move |_| {
                             cx.props.qrcode_state.set(None)
                         },
-                        value: "QRCode"
+                        "QRCode"
                     }
 
-                    input {
+                    button {
                         prevent_default: "onclick",
                         r#type: "button",
                         onclick: move |_| {
@@ -354,7 +353,7 @@ fn TableRow<'a>(cx: Scope<'a, DirEntryProps<'a>>) -> Element {
                                 }
                             });
                         },
-                        value: "Delete"
+                        "Delete"
                     }
                 }
             }
@@ -410,11 +409,11 @@ fn InfoDialog<'a>(cx: Scope<'a>, info_state: &'a UseState<Option<String>>) -> El
             style: "
                 position: fixed;
                 width: 860px;
-                height: 640px;
+                height: 1000px;
                 left: 50%;
                 margin-left: -430px;
                 top: 50%;
-                margin-top: -320px;
+                margin-top: -500px;
                 z-index: 20;
                 border-radius: 5px;
                 border: 2px solid #ccc;
@@ -424,7 +423,7 @@ fn InfoDialog<'a>(cx: Scope<'a>, info_state: &'a UseState<Option<String>>) -> El
             textarea {
                 style: "
                     width:850px;
-                    height: 580px;
+                    height: 940px;
                     margin:5px;
                     border: none;
                     box-sizing:border-box;
@@ -444,12 +443,11 @@ fn InfoDialog<'a>(cx: Scope<'a>, info_state: &'a UseState<Option<String>>) -> El
                     box-sizing:border-box;
                     padding: 10px;
                 ",
-                input {
-                    style: "width: 200px; height: 30px",
+                button {
                     prevent_default: "onclick",
                     r#type: "button",
-                    value: "Close",
                     onclick: |_| info_state.set(None),
+                    "Close",
                 }
             }
         })

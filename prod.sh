@@ -11,4 +11,4 @@ IFS=$'\n\t'
  popd
 
  mkdir -p testdir
- cargo run --bin backend -- --port 8082 --serve-dir ./testdir
+ cargo run --bin backend -- --port 8082 --serve-dir ./testdir --assets-dir ./frontend/dist

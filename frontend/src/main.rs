@@ -50,16 +50,15 @@ fn Listing(cx: Scope) -> Element {
         fut.restart();
     }
 
+    let router_state = use_router(&cx);
     let create_dir_state = use_state(&cx, || None as Option<String>);
     if let Some(dir_path) = create_dir_state.get() {
         create_dir_state.set(None);
         fut.restart();
-        use_router(&cx).replace_route(dir_path.as_str(), None, None);
+        router_state.replace_route(dir_path.as_str(), None, None);
 
         return cx.render(rsx! {
-            Router {
-                Route { to: "", Listing {} }
-            }
+            Listing {}
         });
     }
 
@@ -101,7 +100,7 @@ fn CreateDirectory(
             }
 
             let parent_dir = parent_dir.clone();
-            let create_dir_state = create_dir_state.clone();
+            let create_dir_state = create_dir_state.to_owned();
             cx.spawn(async move {
                 let json_req = JsonRequest::CreateDirectory {
                     dir_name: dir_name.clone(),
@@ -116,7 +115,11 @@ fn CreateDirectory(
                 match resp {
                     Ok(resp) => {
                         info!("created directory: {:?}", resp);
-                        create_dir_state.set(Some(format!("{}/{}", parent_dir, dir_name)));
+                        create_dir_state.set(Some(if parent_dir == "/" {
+                            dir_name
+                        } else {
+                            format!("{}/{}", parent_dir, dir_name)
+                        }));
                     }
                     Err(err) => {
                         info!("failed to create directory: {}", err);
@@ -293,36 +296,38 @@ fn TableRow<'a>(cx: Scope<'a, DirEntryProps<'a>>) -> Element {
                     img { src:"data:image/x-icon;base64,AAABAAEAEBACAAAAAACwAAAAFgAAACgAAAAQAAAAIAAAAAEAAQAAAAAAQAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAA////AAKnAAB6MgAASlIAAEtCAAB7AAAAAnkAAP/YAACDBQAAUGMAAPy/AAACQAAAel4AAEpSAABK0gAAel4AAAJAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", alt:"QRCode" }
                 }
 
-                a {
-                    href: "#",
-                    prevent_default: "onclick",
-                    onclick: move |_| {
-                        let path = format!("/api/ffprobe{}/{}", cx.props.cur_path, entry.file_name);
-                        let info_state = cx.props.info_state.clone();
-                        cx.spawn(async move {
-                            let resp = Request::get(path.as_str())
-                                .send()
-                                .await;
+                (entry.file_type == common::FileType::File).then(|| rsx!(
+                    a {
+                        href: "#",
+                        prevent_default: "onclick",
+                        onclick: move |_| {
+                            let path = format!("/api/ffprobe{}/{}", cx.props.cur_path, entry.file_name);
+                            let info_state = cx.props.info_state.clone();
+                            cx.spawn(async move {
+                                let resp = Request::get(path.as_str())
+                                    .send()
+                                    .await;
 
-                            match resp {
-                                Ok(resp) => {
-                                    let text = resp.text().await.unwrap_or("".to_string());
-                                    if text.is_empty() || text == "\"{\\n\\n}\\n\"" {
-                                        info_state.set(Some("Not Available!".to_string()));
-                                    } else {
-                                        let json_resp: serde_json::Value = serde_json::from_str(text.as_str()).unwrap_or(serde_json::Value::default());
-                                        let json_str = json_resp.to_string().replace("\\n", "\n").replace("\\", "");
-                                        info_state.set(Some(json_str));
+                                match resp {
+                                    Ok(resp) => {
+                                        let text = resp.text().await.unwrap_or("".to_string());
+                                        if text.is_empty() || text == "\"{\\n\\n}\\n\"" {
+                                            info_state.set(Some("Not Available!".to_string()));
+                                        } else {
+                                            let json_resp: serde_json::Value = serde_json::from_str(text.as_str()).unwrap_or(serde_json::Value::default());
+                                            let json_str = json_resp.to_string().replace("\\n", "\n").replace("\\", "");
+                                            info_state.set(Some(json_str));
+                                        }
+                                    }
+                                    Err(err) => {
+                                        error!("failed: {}", err);
                                     }
                                 }
-                                Err(err) => {
-                                    error!("failed: {}", err);
-                                }
-                            }
-                        });
-                    },
-                    "ℹ️ ",
-                }
+                            });
+                        },
+                        "ℹ️ ",
+                    }
+                )),
 
                 a {
                     href: "{api_link}",

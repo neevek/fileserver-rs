@@ -12,7 +12,7 @@ use log::info;
 use path_absolutize::Absolutize;
 use path_dedot::*;
 use serde::Deserialize;
-use std::net::{IpAddr, Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::process::Command;
 use std::str::FromStr;
@@ -34,7 +34,7 @@ struct Opt {
     log_level: String,
 
     /// set the listen addr
-    #[clap(short = 'a', long = "addr", default_value = "::1")]
+    #[clap(short = 'a', long = "addr", default_value = "0.0.0.0")]
     addr: String,
 
     /// set the listen port
@@ -42,8 +42,8 @@ struct Opt {
     port: u16,
 
     /// set the directory where static files are to be found
-    #[clap(long = "static-dir", default_value = "../dist")]
-    static_dir: String,
+    #[clap(long = "assets-dir", default_value = "../assets")]
+    assets_dir: String,
 
     /// the directory to serve, default to the current directory if not specified
     #[clap(long = "serve-dir", default_value = ".")]
@@ -74,6 +74,17 @@ async fn main() {
         }
     }
 
+    let assets_dir = match PathBuf::from(&opt.assets_dir).parse_dot() {
+        Ok(assets_dir) if assets_dir.is_dir() => {
+            info!("assets_dir: {:?}", assets_dir);
+            log::info!("assets_dir directory: {:?}", assets_dir);
+            assets_dir.to_path_buf()
+        }
+        _ => {
+            panic!("assets-dir must be a valid directory");
+        }
+    };
+
     let app = Router::new()
         .route("/api/listing", get(serve_root).post(serve_root))
         .route("/api/listing/*path", get(list_files).post(create_dir))
@@ -87,11 +98,11 @@ async fn main() {
             }))
             .handle_error(|_| async move { AppError("Static file not found".to_string()) }),
         )
-        .merge(SpaRouter::new("/assets", "./frontend/dist").index_file("index.html"))
+        .merge(SpaRouter::new("/assets", assets_dir).index_file("index.html"))
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 
     let sock_addr = SocketAddr::from((
-        IpAddr::from_str(opt.addr.as_str()).unwrap_or(IpAddr::V6(Ipv6Addr::LOCALHOST)),
+        IpAddr::from_str(opt.addr.as_str()).unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST)),
         opt.port,
     ));
 

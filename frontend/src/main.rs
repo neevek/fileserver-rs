@@ -81,8 +81,18 @@ fn Listing(cx: Scope) -> Element {
 
             InfoDialog { info_state: info_state }
         ),
-        Some(Err(err)) => rsx!("Error: {err}"),
-        _ => rsx!("Loading..."),
+        Some(Err(err)) => rsx!(
+            p {
+                class: "raw_message",
+                "Error: {err}"
+            }
+        ),
+        _ => rsx!(
+            p {
+                class: "raw_message",
+                "Loading..."
+            }
+        ),
     })
 }
 
@@ -235,8 +245,10 @@ fn ListingTable<'a>(cx: Scope<'a, DirDescProps<'a>>) -> Element {
             .dir_desc
             .descendants
             .iter()
-            .map(|entry| rsx!(
+            .enumerate()
+            .map(|(index, entry)| rsx!(
                 TableRow {
+                    index: index + 1,
                     key: "{cur_path}/{entry.file_name}",
                     url_base: url_base.as_str(),
                     entry: entry,
@@ -271,6 +283,7 @@ fn TableRow<'a>(cx: Scope<'a, DirEntryProps<'a>>) -> Element {
     cx.render(rsx! {
         tr {
             rsx!(th {
+                "{cx.props.index}. "
                 a {
                     href: "{api_link}",
                     if entry.file_type == common::FileType::Directory {
@@ -332,6 +345,7 @@ fn TableRow<'a>(cx: Scope<'a, DirEntryProps<'a>>) -> Element {
                     }
 
                     button {
+                        style: "color: red;",
                         prevent_default: "onclick",
                         r#type: "button",
                         onclick: move |_| {
@@ -522,6 +536,7 @@ pub struct DirDescProps<'a> {
 
 #[derive(Props)]
 struct DirEntryProps<'a> {
+    index: usize,
     url_base: &'a str,
     entry: &'a DirEntry,
     cur_path: &'a str,

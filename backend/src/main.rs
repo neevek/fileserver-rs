@@ -26,27 +26,29 @@ use walkdir::WalkDir;
 
 static mut SERVE_DIR: Option<PathBuf> = None;
 
-// Setup the command line interface with clap.
 #[derive(Parser, Debug)]
-#[clap(name = "server", about = "A server for our wasm project!")]
+#[clap(
+    name = "fileserver-rs",
+    about = "A static file server that supports upload/create dir/delete/qrcode"
+)]
 struct Opt {
-    /// set the log level
+    /// Log level
     #[clap(short = 'l', long = "log", default_value = "debug")]
     log_level: String,
 
-    /// set the listen addr
+    /// Listen addr
     #[clap(short = 'a', long = "addr", default_value = "0.0.0.0")]
     addr: String,
 
-    /// set the listen port
-    #[clap(short = 'p', long = "port", default_value = "8080")]
+    /// Listen port
+    #[clap(short = 'p', long = "port", default_value = "8888")]
     port: u16,
 
-    /// set the directory where static files are to be found
-    #[clap(long = "assets-dir", default_value = "../assets")]
+    /// Directory where the wasm files built from the frontend sub crate are located
+    #[clap(long = "assets-dir", default_value = "./frontend/dist")]
     assets_dir: String,
 
-    /// the directory to serve, default to the current directory if not specified
+    /// Directory to serve, default to the current directory if not specified
     #[clap(long = "serve-dir", default_value = ".")]
     serve_dir: String,
 }
